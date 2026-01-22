@@ -1,0 +1,13 @@
+{
+    "manifest_version": 3,
+    "name": "我的导航 | Simple Start",
+    "version": "1.0",
+    "description": "简洁、高效、极具设计感的个人浏览器新标签页。",
+    "icons": {
+        "512": "img/icon-512.png"
+    },
+    "chrome_url_overrides": {
+        "newtab": "index.html"
+    },
+    "permissions": []
+}
