@@ -1,15 +1,53 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Render Bookmarks
-    const container = document.getElementById('bookmarks-container');
+    // ========================================
+    // 1. Theme Management
+    // ========================================
+    const themeToggle = document.getElementById('theme-toggle');
 
-    // Function to handle favicon loading errors
-    const handleImageError = (img) => {
-        img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIvPjxsaW5lIHgxPSIxMiIgeTE9IjgiIHgyPSIxMiIgeTI9IjEyIi8+PGxpbmUgeD0iMTIiIHkxPSIxNiIgeDI9IjEyLjAxIiB5MT0iMTYiLz48L3N2Zz4='; // Default icon
+    const getPreferredTheme = () => {
+        const saved = localStorage.getItem('theme');
+        if (saved) return saved;
+        return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     };
 
-    bookmarksData.forEach(category => {
+    const applyTheme = (theme) => {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+    };
+
+    // Apply saved or system theme
+    applyTheme(getPreferredTheme());
+
+    // Toggle theme
+    if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme');
+            applyTheme(current === 'dark' ? 'light' : 'dark');
+        });
+    }
+
+    // Listen for system theme changes
+    window.matchMedia?.('(prefers-color-scheme: dark)')
+        .addEventListener('change', (e) => {
+            if (!localStorage.getItem('theme')) {
+                applyTheme(e.matches ? 'dark' : 'light');
+            }
+        });
+
+    // ========================================
+    // 2. Render Bookmarks
+    // ========================================
+    const container = document.getElementById('bookmarks-container');
+
+    const handleImageError = (img) => {
+        img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIvPjxsaW5lIHgxPSIxMiIgeTE9IjgiIHgyPSIxMiIgeTI9IjEyIi8+PGxpbmUgeD0iMTIiIHkxPSIxNiIgeDI9IjEyLjAxIiB5MT0iMTYiLz48L3N2Zz4=';
+    };
+
+    bookmarksData.forEach((category, index) => {
         const categoryGroup = document.createElement('div');
         categoryGroup.className = 'category-group';
+        // Staggered animation delay
+        categoryGroup.style.transitionDelay = `${index * 0.08}s`;
 
         const title = document.createElement('h2');
         title.className = 'category-title';
@@ -29,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
             icon.src = item.icon;
             icon.alt = item.name;
             icon.className = 'link-icon';
+            icon.loading = 'lazy';
             icon.onerror = () => handleImageError(icon);
 
             const name = document.createElement('span');
@@ -45,7 +84,40 @@ document.addEventListener('DOMContentLoaded', () => {
         container.appendChild(categoryGroup);
     });
 
-    // 2. Time & Date & Greeting
+    // ========================================
+    // 3. Card Entry Animations
+    // ========================================
+    const animateCards = () => {
+        const cards = document.querySelectorAll('.category-group');
+
+        if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, {
+                threshold: 0.1,
+                rootMargin: '0px 0px -30px 0px'
+            });
+
+            cards.forEach(card => observer.observe(card));
+        } else {
+            // Fallback: make all visible
+            cards.forEach(card => card.classList.add('visible'));
+        }
+    };
+
+    // Trigger after a tiny delay for smooth entry
+    requestAnimationFrame(() => {
+        requestAnimationFrame(animateCards);
+    });
+
+    // ========================================
+    // 4. Time & Date & Greeting
+    // ========================================
     const timeEl = document.getElementById('time');
     const dateEl = document.getElementById('date');
     const greetingText = document.getElementById('greeting-text');
@@ -54,25 +126,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateTime = () => {
         const now = new Date();
 
-        // Time
         if (timeEl) {
             timeEl.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
         }
 
-        // Date
         if (dateEl) {
-            dateEl.textContent = now.toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            dateEl.textContent = now.toLocaleDateString('zh-CN', { weekday: 'long', month: 'long', day: 'numeric' });
         }
 
-        // Greeting
         const updateGreeting = async () => {
             if (!greetingText || !greetingIcon) return;
 
             const hour = now.getHours();
             const dateStr = now.toISOString().split('T')[0];
 
-            // 1. 获取日期状态 (0: 工作日, 1: 休息日, 2: 节假日, 3: 节假日调休上班)
-            // 简单逻辑：0 和 3 是“打工人模式”，1 和 2 是“休息模式”
             let isWorkDay = now.getDay() !== 0 && now.getDay() !== 6;
 
             try {
@@ -81,12 +148,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     const status = JSON.parse(cached);
                     isWorkDay = (status === 0 || status === 3);
                 } else {
-                    // 使用提摩科技的免费 API (仅在非扩展环境下由于 CORS 限制可能失效，增加错误处理)
                     const res = await fetch(`https://timor.tech/api/holiday/info/${dateStr}`);
                     const data = await res.json();
                     if (data.code === 0) {
-                        const status = data.type.type; // 0: 休息日, 1: 节假日, 2: 工作日, 3: 调休
-                        // 转换一下逻辑：API 的 0,1 是休，2,3 是班
+                        const status = data.type.type;
                         isWorkDay = (status === 2 || status === 3);
                         localStorage.setItem(`holiday_${dateStr}`, JSON.stringify(status));
                     }
@@ -128,7 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(updateTime, 1000);
     updateTime();
 
-    // 3. Search Functionality (Unified Pill)
+    // ========================================
+    // 5. Search Functionality
+    // ========================================
     const searchInput = document.getElementById('search-input');
     const searchBtn = document.getElementById('search-btn');
     const engineSelector = document.getElementById('engine-selector');
@@ -157,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
         engineSelector.classList.toggle('active');
     });
 
-    // Close dropdown when clicking outside
+    // Close dropdown on outside click
     document.addEventListener('click', () => {
         engineDropdown.classList.remove('show');
         engineSelector.classList.remove('active');
@@ -166,16 +233,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Handle Engine Selection
     engineOptions.forEach(option => {
         option.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent closing immediately
+            e.stopPropagation();
             const selectedEngine = option.dataset.engine;
             currentEngine = selectedEngine;
 
-            // Update UI
             currentEngineIcon.textContent = engineNames[selectedEngine];
             engineOptions.forEach(opt => opt.classList.remove('active'));
             option.classList.add('active');
 
-            // Close dropdown
             engineDropdown.classList.remove('show');
             engineSelector.classList.remove('active');
 
@@ -195,15 +260,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') performSearch();
     });
 
-    // Keyboard Shortcuts
+    // ========================================
+    // 6. Keyboard Shortcuts
+    // ========================================
     document.addEventListener('keydown', (e) => {
-        // 1. Slash to Focus
+        // Slash to Focus Search
         if (e.key === '/' && document.activeElement !== searchInput) {
             e.preventDefault();
             searchInput.focus();
         }
 
-        // 2. Tab to Switch Engine (when focused)
+        // Tab to Switch Engine (when search focused)
         if (e.key === 'Tab' && document.activeElement === searchInput) {
             e.preventDefault();
 
@@ -212,49 +279,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const nextIndex = (currentIndex + 1) % engineKeys.length;
             const nextEngine = engineKeys[nextIndex];
 
-            // Update State
             currentEngine = nextEngine;
-
-            // Update UI
             currentEngineIcon.textContent = engineNames[nextEngine];
 
-            // Update Dropdown Selection State
             engineOptions.forEach(opt => {
-                if (opt.dataset.engine === nextEngine) {
-                    opt.classList.add('active');
-                } else {
-                    opt.classList.remove('active');
-                }
+                opt.classList.toggle('active', opt.dataset.engine === nextEngine);
             });
+        }
+
+        // Escape to blur
+        if (e.key === 'Escape' && document.activeElement === searchInput) {
+            searchInput.blur();
         }
     });
 
-    // 4. Dark Mode Toggle (Safe Implementation)
-    const themeToggle = document.getElementById('theme-toggle');
-    if (themeToggle) {
-        themeToggle.addEventListener('click', () => {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', newTheme);
-            themeToggle.textContent = newTheme === 'dark' ? '浅色模式' : '深色模式';
-        });
-    }
-
-    // Detect system preference
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.setAttribute('data-theme', 'dark');
-        if (themeToggle) themeToggle.textContent = '浅色模式';
-    }
-    // 5. PWA Support (Conditional)
-    // Only run if NOT in a Chrome Extension environment to avoid "Blocked By Response" errors
+    // ========================================
+    // 7. PWA Support (Conditional)
+    // ========================================
     if (!window.location.protocol.includes('extension')) {
-        // A. Inject Manifest dynamically
         const link = document.createElement('link');
         link.rel = 'manifest';
         link.href = 'manifest.webmanifest';
         document.head.appendChild(link);
 
-        // B. Register Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')

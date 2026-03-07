@@ -52,6 +52,12 @@ const bookmarksData = [
                 icon: "https://cdn.deepseek.com/chat/icon.png"
             },
             {
+                id: "google-gemini",
+                name: "Google Gemini",
+                url: "https://gemini.google.com",
+                icon: "https://www.gstatic.com/lamda/images/gemini_sparkle_aurora_33f86dc0c0257da337c63.svg"
+            },
+            {
                 id: "chatgpt",
                 name: "ChatGpt",
                 url: "https://chatgpt.com",
@@ -142,10 +148,10 @@ const bookmarksData = [
                 icon: "https://cdn-doocs.oss-cn-shenzhen.aliyuncs.com/gh/doocs/md/images/favicon.png"
             },
             {
-                id: "maoyan",
-                name: "猫眼票房",
-                url: "https://piaofang.maoyan.com",
-                icon: "https://obj.pipi.cn/festatic/piaofang/moviepro/favicon.ico"
+                id: "baidu-mp",
+                name: "百家号",
+                url: "https://baijiahao.baidu.com/",
+                icon: "https://pic.rmb.bdstatic.com/activity/2025-8/1754378389223/e8c461082fe3.png"
             },
             {
                 id: "douban-tv",
@@ -170,12 +176,6 @@ const bookmarksData = [
                 name: "0lovehub",
                 url: "https://zc.nianshu2022.cn",
                 icon: "https://zc.nianshu2022.cn/favicon.ico"
-            },
-            {
-                id: "with-you",
-                name: "With You",
-                url: "https://time.nianshu2022.cn",
-                icon: "https://time.nianshu2022.cn/favicon.ico"
             },
             {
                 id: "moon-tv",
