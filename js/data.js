@@ -10,12 +10,6 @@ const bookmarksData = [
                 icon: "https://github.githubassets.com/favicons/favicon.png"
             },
             {
-                id: "fontawesome",
-                name: "Font Awesome",
-                url: "https://fontawesome.com/",
-                icon: "https://fontawesome.com/images/favicon/apple-touch-icon.png"
-            },
-            {
                 id: "tencent-cloud",
                 name: "腾讯云",
                 url: "https://cloud.tencent.com/",
@@ -46,12 +40,6 @@ const bookmarksData = [
                 icon: "https://metaso.cn/apple-touch-icon.png"
             },
             {
-                id: "deepseek",
-                name: "Deepseek",
-                url: "https://chat.deepseek.com",
-                icon: "https://cdn.deepseek.com/chat/icon.png"
-            },
-            {
                 id: "google-gemini",
                 name: "Google Gemini",
                 url: "https://gemini.google.com",
@@ -80,12 +68,6 @@ const bookmarksData = [
                 name: "ProcessOn",
                 url: "https://www.processon.com/",
                 icon: "https://www.processon.com/public_login/favicon.983368c6.ico"
-            },
-            {
-                id: "mockplus-rp",
-                name: "摹客RP",
-                url: "https://rp.mockplus.cn/",
-                icon: "https://img02.mockplus.cn/idoc/image/2020-10-27/fc6f8811-17fb-11eb-a26f-b3a70a815e7f.png"
             },
             {
                 id: "huaban",
