@@ -166,6 +166,12 @@ const bookmarksData = [
                 icon: "https://mv.nianshu2022.cn/favicon.ico"
             },
             {
+                id: "moon-tv-plus",
+                name: "MoonTVPlus",
+                url: "https://moontv-plus.2478951652.workers.dev/",
+                icon: "https://moontv-plus.2478951652.workers.dev/favicon.ico"
+            },
+            {
                 id: "my-portfolio",
                 name: "数字花园",
                 url: "https://blog.nianshu2022.cn",
