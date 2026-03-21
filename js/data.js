@@ -169,7 +169,7 @@ const bookmarksData = [
                 id: "moon-tv-plus",
                 name: "MoonTVPlus",
                 url: "https://moontv-plus.2478951652.workers.dev/",
-                icon: "https://moontv-plus.2478951652.workers.dev/favicon.ico"
+                icon: "https://blog.nianshu2022.cn/icon.png?c64454798d2149d1"
             },
             {
                 id: "my-portfolio",
