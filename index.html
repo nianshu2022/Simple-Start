@@ -10,40 +10,69 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap"
         rel="stylesheet">
     <!-- Styles -->
-    <link rel="stylesheet" href="css/style.css?v=2">
+    <link rel="stylesheet" href="css/style.css?v=3">
+    <link rel="stylesheet" href="css/weather.css?v=2">
     <link rel="icon" href="img/icon-512.png" type="image/png">
 </head>
 
 <body>
+    <canvas id="weather-canvas"></canvas>
+    <canvas id="weather-foreground"></canvas>
     <div class="background-overlay"></div>
 
+    <!-- Floating Toolbar — top right -->
+    <div class="floating-toolbar">
+        <div class="weather-widget" id="weather-widget">
+            <div class="weather-widget-main">
+                <img class="weather-icon" id="weather-icon" src="" alt="天气">
+                <div class="weather-info">
+                    <span class="weather-temp" id="weather-temp">--°</span>
+                    <span class="weather-city" id="weather-city">--</span>
+                </div>
+            </div>
+            <div class="weather-detail" id="weather-detail">
+                <div class="weather-detail-row">
+                    <span class="weather-detail-label">天气</span>
+                    <span class="weather-detail-value" id="weather-desc">--</span>
+                </div>
+                <div class="weather-detail-row">
+                    <span class="weather-detail-label">体感</span>
+                    <span class="weather-detail-value" id="weather-feels">--°</span>
+                </div>
+                <div class="weather-detail-row">
+                    <span class="weather-detail-label">湿度</span>
+                    <span class="weather-detail-value" id="weather-humidity">--%</span>
+                </div>
+                <div class="weather-detail-row">
+                    <span class="weather-detail-label">风向</span>
+                    <span class="weather-detail-value" id="weather-wind">--</span>
+                </div>
+            </div>
+        </div>
+
+        <button class="theme-toggle-btn" id="theme-toggle" title="切换主题">
+            <span class="icon-sun">☀️</span>
+            <span class="icon-moon">🌙</span>
+        </button>
+    </div>
+
     <div class="container">
-        <!-- Top Bar -->
-        <header class="top-bar">
-            <div class="top-bar-left">
-                <div id="greeting-container">
-                    <span id="greeting-icon">☀️</span>
-                    <span id="greeting-text">Good Morning</span>
-                </div>
+        <!-- Hero: Centered Time & Greeting -->
+        <section class="hero-section">
+            <div id="greeting-container" class="greeting-pill">
+                <span id="greeting-icon">☀️</span>
+                <span id="greeting-text">Good Morning</span>
             </div>
-
-            <div class="top-bar-right">
-                <div id="datetime" class="datetime-container">
-                    <span id="time">00:00</span>
-                    <span class="divider">·</span>
-                    <span id="date">Loading...</span>
-                </div>
-                <button class="theme-toggle-btn" id="theme-toggle" title="切换主题">
-                    <span class="icon-sun">☀️</span>
-                    <span class="icon-moon">🌙</span>
-                </button>
+            <div class="time-display">
+                <h1 id="time">00:00</h1>
             </div>
-        </header>
+            <p id="date" class="date-text">Loading...</p>
+        </section>
 
-        <!-- Centered Search Section -->
+        <!-- Search Section -->
         <section class="search-section">
             <div class="search-container">
                 <div class="search-engine-selector" id="engine-selector">
@@ -79,20 +108,17 @@
             </div>
         </section>
 
-        <!-- Main Content: Bookmarks -->
+        <!-- Bookmarks -->
         <main id="bookmarks-container">
             <!-- Content will be injected by main.js -->
         </main>
-
-        <!-- Footer -->
-        <footer class="footer">
-            按 <kbd>/</kbd> 聚焦搜索 · 按 <kbd>Tab</kbd> 切换引擎
-        </footer>
     </div>
 
     <!-- Scripts -->
     <script src="js/data.js?v=2"></script>
-    <script src="js/main.js?v=2"></script>
+    <script src="js/weather-animation.js?v=2"></script>
+    <script src="js/weather.js?v=1"></script>
+    <script src="js/main.js?v=3"></script>
 </body>
 
 </html>

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Read(//c/Users/24789/.claude/plans/**)",
+      "Bash(npx serve *)",
+      "Bash(npx -y serve -l 3000 -s .)",
+      "Bash(npx -y serve -l 3000 -s \"d:\\\\project\\\\Simple-Start\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(node -c \"d:/project/Simple-Start/js/weather-animation.js\")"
+    ]
+  }
+}

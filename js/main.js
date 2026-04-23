@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const applyTheme = (theme) => {
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('theme', theme);
+        if (window._weatherEngine) {
+            window._weatherEngine.onThemeChange(theme);
+        }
     };
 
     // Apply saved or system theme
@@ -314,4 +317,97 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
+
+    // ========================================
+    // 8. Weather Animation
+    // ========================================
+    if (typeof WeatherAnimationEngine !== 'undefined' && typeof WeatherService !== 'undefined') {
+        const canvas = document.getElementById('weather-canvas');
+        if (canvas) {
+            window._weatherEngine = new WeatherAnimationEngine(canvas);
+            WeatherService.init(window._weatherEngine);
+        }
+    }
+
+    // ========================================
+    // 9. Weather Debug Panel (press W)
+    // ========================================
+    const weatherTypes = [
+        { key: 'sunny',   label: '☀️ 晴天' },
+        { key: 'cloudy',  label: '⛅ 多云' },
+        { key: 'overcast',label: '☁️ 阴天' },
+        { key: 'rain',    label: '🌧 下雨' },
+        { key: 'snow',    label: '❄️ 下雪' },
+        { key: 'fog',     label: '🌫 大雾' },
+        { key: 'thunder', label: '⛈ 雷暴' },
+        { key: 'night',   label: '🌙 夜晚' },
+    ];
+
+    let debugPanel = null;
+
+    function toggleDebugPanel() {
+        if (debugPanel) {
+            debugPanel.remove();
+            debugPanel = null;
+            return;
+        }
+
+        debugPanel = document.createElement('div');
+        debugPanel.style.cssText = `
+            position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 0.5rem; padding: 0.6rem 0.8rem;
+            background: rgba(15,23,42,0.4); backdrop-filter: blur(30px) saturate(160%);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 14px;
+            z-index: 9999; animation: fadeUp 0.25s ease both;
+        `;
+
+        // Inject keyframes once
+        if (!document.getElementById('debug-anim')) {
+            const style = document.createElement('style');
+            style.id = 'debug-anim';
+            style.textContent = `@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}`;
+            document.head.appendChild(style);
+        }
+
+        weatherTypes.forEach(({ key, label }) => {
+            const btn = document.createElement('button');
+            btn.textContent = label;
+            btn.style.cssText = `
+                padding: 0.45rem 0.7rem; border-radius: 8px; border: none; cursor: pointer;
+                font-size: 0.8rem; font-family: inherit; white-space: nowrap;
+                background: rgba(255,255,255,0.08); color: #e2e8f0;
+                transition: all 0.2s;
+            `;
+            btn.onmouseenter = () => btn.style.background = 'rgba(255,255,255,0.18)';
+            btn.onmouseleave = () => btn.style.background = 'rgba(255,255,255,0.08)';
+            btn.onclick = () => {
+                if (window._weatherEngine) {
+                    window._weatherEngine.setWeatherType(key);
+                    document.body.classList.add('weather-active');
+                }
+            };
+            debugPanel.appendChild(btn);
+        });
+
+        // Close button
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '✕';
+        closeBtn.style.cssText = `
+            padding: 0.45rem 0.55rem; border-radius: 8px; border: none; cursor: pointer;
+            font-size: 0.8rem; background: rgba(255,255,255,0.06); color: #94a3b8;
+            transition: all 0.2s;
+        `;
+        closeBtn.onmouseenter = () => { closeBtn.style.background = 'rgba(239,68,68,0.2)'; closeBtn.style.color = '#f87171'; };
+        closeBtn.onmouseleave = () => { closeBtn.style.background = 'rgba(255,255,255,0.06)'; closeBtn.style.color = '#94a3b8'; };
+        closeBtn.onclick = () => { debugPanel.remove(); debugPanel = null; };
+        debugPanel.appendChild(closeBtn);
+
+        document.body.appendChild(debugPanel);
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'w' && document.activeElement !== searchInput && !e.ctrlKey && !e.metaKey) {
+            toggleDebugPanel();
+        }
+    });
 });

@@ -1,10 +1,13 @@
-const CACHE_NAME = 'simple-tab-v3';
+const CACHE_NAME = 'simple-tab-v4';
 const ASSETS = [
     './',
     './index.html',
     './css/style.css',
+    './css/weather.css',
     './js/main.js',
     './js/data.js',
+    './js/weather.js',
+    './js/weather-animation.js',
     './img/icon-512.png'
 ];
 
