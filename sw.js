@@ -25,6 +25,7 @@ self.addEventListener('install', (e) => {
 
 // Fetch Event - Network first, fall back to cache
 self.addEventListener('fetch', (e) => {
+    if (e.request.method !== 'GET') return;
     e.respondWith(
         fetch(e.request)
             .then(response => {

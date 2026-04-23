@@ -217,14 +217,15 @@ class WeatherAnimationEngine {
                 this.nextScene = null;
                 this.currentForeground = this.nextForeground || null;
                 this.nextForeground = null;
+            } else {
+                this.ctx.globalAlpha = 1 - this.transitionProgress;
+                this.currentScene.update(dt);
+                this.currentScene.render();
+                this.ctx.globalAlpha = this.transitionProgress;
+                this.nextScene.update(dt);
+                this.nextScene.render();
+                this.ctx.globalAlpha = 1;
             }
-            this.ctx.globalAlpha = 1 - this.transitionProgress;
-            this.currentScene.update(dt);
-            this.currentScene.render();
-            this.ctx.globalAlpha = this.transitionProgress;
-            this.nextScene.update(dt);
-            this.nextScene.render();
-            this.ctx.globalAlpha = 1;
         } else {
             this.currentScene.update(dt);
             this.currentScene.render();
