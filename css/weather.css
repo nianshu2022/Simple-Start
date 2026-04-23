@@ -110,6 +110,17 @@ html[data-theme="light"] .weather-widget:hover {
     line-height: 1.1;
 }
 
+.weather-country {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.1;
+    display: none;
+}
+
 .weather-city {
     font-size: 0.78rem;
     color: var(--text-primary);
@@ -198,6 +209,11 @@ html[data-theme="light"] .weather-detail {
 
     .weather-temp {
         font-size: 0.82rem;
+    }
+
+    .weather-country {
+        font-size: 0.65rem;
+        max-width: 40px;
     }
 
     .weather-city {

@@ -811,6 +811,85 @@ html[data-theme="dark"] .theme-toggle-btn .icon-moon {
 /* =========================
    10. Responsive
    ========================= */
+/* Large screens */
+@media (min-width: 1440px) {
+    :root {
+        --max-content-width: 1300px;
+        --hero-time-size: 5.2rem;
+        --hero-date-size: 0.98rem;
+    }
+
+    main {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.2rem;
+    }
+
+    .search-container {
+        max-width: 680px;
+    }
+
+    .search-container:focus-within {
+        max-width: 740px;
+    }
+}
+
+@media (min-width: 1920px) {
+    :root {
+        --max-content-width: 1560px;
+        --hero-time-size: 5.8rem;
+        --hero-date-size: 1rem;
+    }
+
+    main {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 1.3rem;
+    }
+
+    .search-container {
+        max-width: 760px;
+    }
+
+    .search-container:focus-within {
+        max-width: 820px;
+    }
+}
+
+@media (min-width: 2560px) {
+    :root {
+        --max-content-width: 1920px;
+        --hero-time-size: 6.5rem;
+        --hero-date-size: 1.05rem;
+    }
+
+    .container {
+        padding: 6rem 0 2rem;
+    }
+
+    main {
+        grid-template-columns: repeat(6, 1fr);
+        gap: 1.5rem;
+    }
+
+    .search-container {
+        max-width: 860px;
+        height: 58px;
+    }
+
+    .search-container:focus-within {
+        max-width: 920px;
+    }
+
+    .link-icon {
+        width: 28px;
+        height: 28px;
+    }
+
+    .link-name {
+        font-size: 0.95rem;
+    }
+}
+
+/* Small screens */
 @media (max-width: 1024px) {
     :root {
         --hero-time-size: 3.8rem;

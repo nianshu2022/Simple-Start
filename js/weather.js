@@ -59,28 +59,39 @@ const WeatherService = (() => {
         } catch {}
     }
 
+    // 国旗 emoji 生成（ISO 3166-1 alpha-2 → 区域指示符号）
+    function countryFlag(code) {
+        if (!code || code.length !== 2) return '';
+        return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0)));
+    }
+
     // 通过 IP 获取位置和城市名
     async function getLocationByIP() {
         const apis = [
-            { url: 'https://ipapi.co/json/', lat: 'latitude', lon: 'longitude', city: 'city' },
-            { url: 'https://ipinfo.io/json', lat: null, lon: null, city: 'city', parseLoc: true },
+            { url: 'https://ipapi.co/json/', lat: 'latitude', lon: 'longitude', city: 'city', country: 'country_name', code: 'country_code' },
+            { url: 'https://ipinfo.io/json', lat: null, lon: null, city: 'city', country: 'country', code: 'country', parseLoc: true },
         ];
         for (const api of apis) {
             try {
                 const res = await fetch(api.url);
                 const data = await res.json();
-                let lat, lon, city;
+                let lat, lon, city, country, countryCode;
                 if (api.parseLoc && data.loc) {
                     const [la, lo] = data.loc.split(',');
                     lat = parseFloat(la); lon = parseFloat(lo); city = data.city;
+                    countryCode = data.country;
                 } else {
                     lat = data[api.lat]; lon = data[api.lon]; city = data[api.city];
+                    country = data[api.country];
+                    countryCode = data[api.code];
                 }
                 if (lat && lon) {
                     const location = {
                         lat: parseFloat(lat).toFixed(2),
                         lon: parseFloat(lon).toFixed(2),
                         city: city || '未知',
+                        country: country || '',
+                        countryCode: countryCode || '',
                         timestamp: Date.now()
                     };
                     setCache(LOCATION_CACHE_KEY, location);
@@ -127,16 +138,25 @@ const WeatherService = (() => {
         return null;
     }
 
-    // 获取城市信息
+    // 获取城市和国家信息
     async function fetchCity(location) {
         try {
             const res = await fetch(`${GEO_API}/v2/city/lookup?location=${location.lon},${location.lat}&key=${apiKey}`);
             const data = await res.json();
             if ((data.code === '200' || data.code === 200) && data.location?.length) {
-                return data.location[0].name;
+                const loc = data.location[0];
+                return {
+                    city: loc.name,
+                    country: loc.country || '',
+                    countryCode: loc.countryCode || location.countryCode || ''
+                };
             }
         } catch {}
-        return location.city || '未知';
+        return {
+            city: location.city || '未知',
+            country: location.country || '',
+            countryCode: location.countryCode || ''
+        };
     }
 
     // 获取天气数据
@@ -161,7 +181,9 @@ const WeatherService = (() => {
             humidity: weatherData.now.humidity,
             windDir: weatherData.now.windDir,
             windScale: weatherData.now.windScale,
-            city: city,
+            city: city.city,
+            country: city.country,
+            countryCode: city.countryCode,
             updateTime: weatherData.updateTime,
             timestamp: Date.now()
         };
@@ -183,6 +205,7 @@ const WeatherService = (() => {
         const iconEl = document.getElementById('weather-icon');
         const tempEl = document.getElementById('weather-temp');
         const cityEl = document.getElementById('weather-city');
+        const countryEl = document.getElementById('weather-country');
         const descEl = document.getElementById('weather-desc');
         const feelsEl = document.getElementById('weather-feels');
         const humidityEl = document.getElementById('weather-humidity');
@@ -225,6 +248,11 @@ const WeatherService = (() => {
             }, 3000);
         }
         if (tempEl) tempEl.textContent = `${data.temp}°`;
+        if (countryEl) {
+            const flag = countryFlag(data.countryCode);
+            countryEl.textContent = flag ? `${flag} ${data.country || ''}` : (data.country || '');
+            countryEl.style.display = data.country ? '' : 'none';
+        }
         if (cityEl) cityEl.textContent = data.city;
         if (descEl) descEl.textContent = data.text;
         if (feelsEl) feelsEl.textContent = `${data.feelsLike}°`;

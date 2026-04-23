@@ -1250,6 +1250,160 @@ class BaseForeground {
     getThemeColors() { return { isDark: this.engine.theme === 'dark' }; }
 }
 
+// ==================== 元素雨滴辅助 ====================
+function setupCardDrops(maxDrops, maxDrips, dropInterval, dripSpeed) {
+    return {
+        cardDrops: [],
+        cardDrips: [],
+        cardDropTimer: 0,
+        cardRects: [],
+        cardRectTimer: 0,
+        _maxDrops: maxDrops,
+        _maxDrips: maxDrips,
+        _dropInterval: dropInterval,
+        _dripSpeed: dripSpeed
+    };
+}
+
+// 收集页面上所有可见元素的位置
+function collectVisibleRects(w, h) {
+    const rects = [];
+    const all = document.querySelectorAll('body *');
+    for (let i = 0; i < all.length; i++) {
+        const el = all[i];
+        const tag = el.tagName;
+        if (tag === 'CANVAS' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'BR') continue;
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 30 || r.height < 10) continue;
+        if (r.bottom < 0 || r.top > h) continue;
+        rects.push({ left: r.left, top: r.top, width: r.width });
+    }
+    return rects;
+}
+
+function updateCardDrops(cd, w, h, dt) {
+    const factor = dt / 16.67;
+
+    // 每 1.5 秒刷新一次元素位置
+    cd.cardRectTimer += dt;
+    if (cd.cardRectTimer > 1500) {
+        cd.cardRectTimer = 0;
+        cd.cardRects = collectVisibleRects(w, h);
+    }
+
+    // 在元素顶部生成水花
+    cd.cardDropTimer += dt;
+    const interval = cd._dropInterval;
+    if (cd.cardRects.length > 0 && cd.cardDropTimer >= interval) {
+        cd.cardDropTimer = 0;
+        // 每次生成 1~2 个水花
+        const count = Math.random() < 0.4 ? 2 : 1;
+        for (let n = 0; n < count; n++) {
+            const card = cd.cardRects[Math.floor(Math.random() * cd.cardRects.length)];
+            const x = card.left + Math.random() * card.width;
+            const y = card.top;
+            // 冲击水珠
+            cd.cardDrops.push({
+                x, y,
+                opacity: Math.random() * 0.35 + 0.25,
+                life: 1,
+                size: Math.random() * 3 + 2.5
+            });
+            // 溅起水滴 3~5 个
+            const sc = 3 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < sc; i++) {
+                const angle = -Math.PI * (0.12 + Math.random() * 0.76);
+                const spd = 1.2 + Math.random() * 2.2;
+                cd.cardDrops.push({
+                    x, y,
+                    vx: Math.cos(angle) * spd * (Math.random() < 0.5 ? 1 : -1),
+                    vy: Math.sin(angle) * spd,
+                    opacity: Math.random() * 0.3 + 0.2,
+                    life: 0.9 + Math.random() * 0.5,
+                    size: 1 + Math.random() * 1.5,
+                    splash: true
+                });
+            }
+            // 水滴流下
+            if (Math.random() < 0.75) {
+                cd.cardDrips.push({
+                    x: x + (Math.random() - 0.5) * 4,
+                    y: y,
+                    speed: Math.random() * 0.6 + cd._dripSpeed,
+                    length: Math.random() * 45 + 20,
+                    opacity: Math.random() * 0.3 + 0.12,
+                    life: 1,
+                    wobblePhase: Math.random() * Math.PI * 2,
+                    wobbleSpeed: Math.random() * 0.04 + 0.02,
+                    width: Math.random() * 0.8 + 1.2
+                });
+            }
+        }
+        if (cd.cardDrops.length > cd._maxDrops) cd.cardDrops.splice(0, cd.cardDrops.length - cd._maxDrops);
+    }
+
+    // 更新水花
+    cd.cardDrops = cd.cardDrops.filter(d => {
+        if (d.splash) {
+            d.x += d.vx * factor;
+            d.y += d.vy * factor;
+            d.vy += 0.14 * factor;
+        }
+        d.life -= 0.03 * factor;
+        return d.life > 0;
+    });
+
+    // 更新水流
+    cd.cardDrips = cd.cardDrips.filter(d => {
+        d.y += d.speed * factor;
+        d.wobblePhase += d.wobbleSpeed * factor;
+        d.life -= 0.008 * factor;
+        d.opacity = d.life * 0.22;
+        return d.life > 0 && d.y < h;
+    });
+}
+
+function renderCardDrops(ctx, cd, isDark) {
+    const dropColor = isDark ? '170, 210, 250' : '200, 225, 255';
+
+    // 水花冲击点
+    cd.cardDrops.forEach(d => {
+        if (d.splash) {
+            ctx.fillStyle = `rgba(${dropColor}, ${d.opacity * d.life})`;
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            // 冲击扩散圆
+            const r = d.size * (2.8 - d.life * 1.5);
+            ctx.strokeStyle = `rgba(${dropColor}, ${d.opacity * d.life * 0.6})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    });
+
+    // 水流
+    const dripColor = isDark ? '160, 200, 245' : '190, 220, 255';
+    cd.cardDrips.forEach(d => {
+        const wobbleX = Math.sin(d.wobblePhase) * 2.2;
+        ctx.lineWidth = d.width || 1.4;
+        ctx.strokeStyle = `rgba(${dripColor}, ${d.opacity})`;
+        ctx.beginPath();
+        ctx.moveTo(d.x + wobbleX, d.y);
+        ctx.quadraticCurveTo(d.x + wobbleX * 1.4, d.y + d.length * 0.5, d.x + wobbleX * 0.4, d.y + d.length);
+        ctx.stroke();
+        // 水滴尾部圆点
+        ctx.fillStyle = `rgba(${dripColor}, ${d.opacity * 1.3})`;
+        ctx.beginPath();
+        ctx.arc(d.x + wobbleX * 0.4, d.y + d.length, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
 // ==================== 雨天前景 ====================
 class RainForeground extends BaseForeground {
     setup() {
@@ -1261,6 +1415,8 @@ class RainForeground extends BaseForeground {
         for (let i = 0; i < 35; i++) {
             this.drops.push(this.createDrop());
         }
+
+        this.cd = setupCardDrops(80, 50, 45, 0.35);
     }
 
     createDrop() {
@@ -1322,6 +1478,8 @@ class RainForeground extends BaseForeground {
             d.opacity = d.life * 0.2;
             return d.life > 0 && d.y < this.h;
         });
+
+        updateCardDrops(this.cd, this.w, this.h, dt);
     }
 
     render(ctx) {
@@ -1360,6 +1518,8 @@ class RainForeground extends BaseForeground {
             ctx.arc(d.x + wobbleX * 0.5, d.y + d.length, 2, 0, Math.PI * 2);
             ctx.fill();
         });
+
+        renderCardDrops(ctx, this.cd, isDark);
     }
 }
 
@@ -1432,6 +1592,8 @@ class ThunderForeground extends BaseForeground {
         this.flashOpacity = 0;
         this.dropTimer = 0;
         for (let i = 0; i < 50; i++) this.drops.push(this.createDrop());
+
+        this.cd = setupCardDrops(100, 60, 30, 0.45);
     }
 
     createDrop() {
@@ -1494,6 +1656,8 @@ class ThunderForeground extends BaseForeground {
         });
 
         if (this.flashOpacity > 0) this.flashOpacity -= 0.06 * factor;
+
+        updateCardDrops(this.cd, this.w, this.h, dt);
     }
 
     triggerFlash() { this.flashOpacity = 0.6; }
@@ -1540,6 +1704,8 @@ class ThunderForeground extends BaseForeground {
             ctx.arc(d.x + wobbleX * 0.3, d.y + d.length, 2.5, 0, Math.PI * 2);
             ctx.fill();
         });
+
+        renderCardDrops(ctx, this.cd, isDark);
     }
 }
 

@@ -20,7 +20,6 @@
 
 <body>
     <canvas id="weather-canvas"></canvas>
-    <canvas id="weather-foreground"></canvas>
     <div class="background-overlay"></div>
 
     <!-- Floating Toolbar — top right -->
@@ -30,6 +29,7 @@
                 <img class="weather-icon" id="weather-icon" src="" alt="天气">
                 <div class="weather-info">
                     <span class="weather-temp" id="weather-temp">--°</span>
+                    <span class="weather-country" id="weather-country"></span>
                     <span class="weather-city" id="weather-city">--</span>
                 </div>
             </div>
@@ -119,6 +119,7 @@
     <script src="js/weather-animation.js?v=2"></script>
     <script src="js/weather.js?v=1"></script>
     <script src="js/main.js?v=3"></script>
+    <canvas id="weather-foreground"></canvas>
 </body>
 
 </html>
