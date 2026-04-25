@@ -352,6 +352,33 @@ const WeatherService = (() => {
         setTextContent('weather-warning-sub', `${sender} · ${level} · ${sourceTag}`);
     }
 
+    function normalizeTextValue(value, fallback = '--') {
+        if (value === null || typeof value === 'undefined') return fallback;
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            const text = String(value).trim();
+            return text || fallback;
+        }
+        return fallback;
+    }
+
+    function resolvePrimaryPollutant(primary) {
+        if (!primary) return '';
+
+        if (typeof primary === 'string' || typeof primary === 'number') {
+            const text = String(primary).trim();
+            return text;
+        }
+
+        if (typeof primary === 'object') {
+            const candidate = primary.name || primary.text || primary.label || primary.value || primary.code;
+            if (candidate === null || typeof candidate === 'undefined') return '';
+            const text = String(candidate).trim();
+            return text;
+        }
+
+        return '';
+    }
+
     function renderAir(airNow, airSource = 'none') {
         const hasAir = Boolean(airNow && typeof airNow === 'object');
         if (!hasAir) {
@@ -361,13 +388,18 @@ const WeatherService = (() => {
             return;
         }
 
-        const aqi = airNow.aqi ?? '--';
+        const aqi = normalizeTextValue(airNow.aqi, '--');
+        const categoryText = normalizeTextValue(airNow.category, '--');
+        const pm2p5Text = normalizeTextValue(airNow.pm2p5, '--');
+        const pm10Text = normalizeTextValue(airNow.pm10, '--');
+        const primaryText = resolvePrimaryPollutant(airNow.primary);
+
         const sourceTag = airSource === 'v1' ? '新接口' : airSource === 'v7-fallback' ? '旧接口兜底' : '未知来源';
         setTextContent('weather-air-aqi', `AQI ${aqi}`);
-        setTextContent('weather-air-level', `${airNow.category || '--'} · ${sourceTag}`);
+        setTextContent('weather-air-level', `${categoryText} · ${sourceTag}`);
         setTextContent(
             'weather-air-sub',
-            `PM2.5 ${airNow.pm2p5 ?? '--'} · PM10 ${airNow.pm10 ?? '--'}${airNow.primary ? ` · 首要污染物 ${airNow.primary}` : ''}`
+            `PM2.5 ${pm2p5Text} · PM10 ${pm10Text}${primaryText ? ` · 首要污染物 ${primaryText}` : ''}`
         );
     }
 
