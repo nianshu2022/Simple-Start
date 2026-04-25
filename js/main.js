@@ -499,38 +499,38 @@ document.addEventListener('DOMContentLoaded', () => {
         WeatherService.init(window._weatherEngine);
     };
 
-    const initMobileToolbarAutoCompact = () => {
+    const initMobileToolbarAutoHide = () => {
         const toolbar = document.querySelector('.floating-toolbar');
         if (!toolbar) return;
 
         const mediaQuery = window.matchMedia('(max-width: 480px)');
         let ticking = false;
-        let compact = false;
+        let hidden = false;
 
-        const applyCompactState = () => {
+        const applyHiddenState = () => {
             if (!mediaQuery.matches) {
-                toolbar.classList.remove('is-compact');
-                compact = false;
+                toolbar.classList.remove('is-hidden');
+                hidden = false;
                 return;
             }
 
-            const shouldCompact = window.scrollY > 18;
-            if (shouldCompact === compact) return;
-            compact = shouldCompact;
-            toolbar.classList.toggle('is-compact', compact);
+            const shouldHide = window.scrollY > 18;
+            if (shouldHide === hidden) return;
+            hidden = shouldHide;
+            toolbar.classList.toggle('is-hidden', hidden);
         };
 
         const onScroll = () => {
             if (ticking) return;
             ticking = true;
             requestAnimationFrame(() => {
-                applyCompactState();
+                applyHiddenState();
                 ticking = false;
             });
         };
 
         const onMediaChange = () => {
-            applyCompactState();
+            applyHiddenState();
         };
 
         window.addEventListener('scroll', onScroll, { passive: true });
@@ -541,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
             mediaQuery.addListener(onMediaChange);
         }
 
-        applyCompactState();
+        applyHiddenState();
     };
 
     const initWeatherDebugPanel = (searchModule) => {
@@ -642,6 +642,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initKeyboardShortcuts(searchModule);
     initPWA();
     initWeather();
-    initMobileToolbarAutoCompact();
+    initMobileToolbarAutoHide();
     initWeatherDebugPanel(searchModule);
 });
