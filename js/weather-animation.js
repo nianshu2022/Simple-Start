@@ -78,6 +78,9 @@ class WeatherAnimationEngine {
         this.resizeTimer = null;
         this.noise = new SimplexNoise(42);
 
+        this.performanceProfile = this.createPerformanceProfile();
+        this.targetFrameInterval = 1000 / this.performanceProfile.targetFps;
+
         this.scenes = {
             sunny: new SunnyScene(this),
             cloudy: new CloudyScene(this),
@@ -90,9 +93,16 @@ class WeatherAnimationEngine {
         };
 
         this.foregroundCanvas = document.getElementById('weather-foreground');
-        this.foregroundCtx = this.foregroundCanvas ? this.foregroundCanvas.getContext('2d') : null;
+        this.foregroundCtx = (this.foregroundCanvas && this.performanceProfile.enableForegroundEffects)
+            ? this.foregroundCanvas.getContext('2d')
+            : null;
         this.currentForeground = null;
         this.foregrounds = {};
+
+        if (this.foregroundCanvas && !this.performanceProfile.enableForegroundEffects) {
+            this.foregroundCanvas.style.display = 'none';
+        }
+
         if (this.foregroundCtx) {
             this.foregrounds = {
                 rain: new RainForeground(this),
@@ -108,8 +118,34 @@ class WeatherAnimationEngine {
         if (this.reducedMotion) this.renderStaticFallback();
     }
 
+    createPerformanceProfile() {
+        const nav = navigator || {};
+        const connection = nav.connection || nav.mozConnection || nav.webkitConnection;
+        const saveData = Boolean(connection?.saveData);
+        const deviceMemory = Number(nav.deviceMemory || 0);
+        const cores = Number(nav.hardwareConcurrency || 0);
+
+        const lowPower = this.reducedMotion || saveData || (deviceMemory > 0 && deviceMemory <= 4) || (cores > 0 && cores <= 4);
+
+        return {
+            lowPower,
+            targetFps: lowPower ? 24 : 60,
+            sceneDensity: lowPower ? 0.55 : 1,
+            foregroundDensity: lowPower ? 0.45 : 1,
+            maxDpr: lowPower ? 1.25 : 2,
+            enableForegroundEffects: !lowPower
+        };
+    }
+
+    scaleCount(base, min = 1, channel = 'scene') {
+        const factor = channel === 'foreground'
+            ? this.performanceProfile.foregroundDensity
+            : this.performanceProfile.sceneDensity;
+        return Math.max(min, Math.round(base * factor));
+    }
+
     resize() {
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = Math.min(window.devicePixelRatio || 1, this.performanceProfile.maxDpr);
         this.canvas.width = window.innerWidth * dpr;
         this.canvas.height = window.innerHeight * dpr;
         this.canvas.style.width = window.innerWidth + 'px';
@@ -120,7 +156,7 @@ class WeatherAnimationEngine {
 
         Object.values(this.scenes).forEach(scene => scene.resize(this.w, this.h));
 
-        if (this.foregroundCanvas) {
+        if (this.foregroundCanvas && this.foregroundCtx) {
             this.foregroundCanvas.width = window.innerWidth * dpr;
             this.foregroundCanvas.height = window.innerHeight * dpr;
             this.foregroundCanvas.style.width = window.innerWidth + 'px';
@@ -192,6 +228,12 @@ class WeatherAnimationEngine {
     loop(timestamp) {
         if (!this.running) return;
         const dt = Math.min(timestamp - this.lastTime, 50);
+
+        if (dt < this.targetFrameInterval) {
+            requestAnimationFrame(t => this.loop(t));
+            return;
+        }
+
         this.lastTime = timestamp;
 
         this.frameCount++;
@@ -290,102 +332,187 @@ class SunnyScene extends BaseScene {
     setup() {
         this.sunAngle = 0;
         this.rayAngle = 0;
+        this.time = 0;
+        this.heatWavePhase = Math.random() * Math.PI * 2;
         this.dustParticles = [];
-        for (let i = 0; i < 20; i++) {
+        this.cirrus = [];
+
+        const dustCount = this.engine.scaleCount(36, 14, 'scene');
+        for (let i = 0; i < dustCount; i++) {
             this.dustParticles.push({
                 x: Math.random() * this.w,
                 y: Math.random() * this.h,
-                size: Math.random() * 2.5 + 0.5,
-                speed: Math.random() * 0.3 + 0.1,
-                opacity: Math.random() * 0.3 + 0.1,
+                size: Math.random() * 2.8 + 0.4,
+                speed: Math.random() * 0.35 + 0.08,
+                opacity: Math.random() * 0.34 + 0.08,
                 phase: Math.random() * Math.PI * 2
+            });
+        }
+
+        const cirrusCount = this.engine.scaleCount(8, 3, 'scene');
+        for (let i = 0; i < cirrusCount; i++) {
+            this.cirrus.push({
+                x: Math.random() * this.w,
+                y: Math.random() * this.h * 0.42,
+                w: Math.random() * 240 + 180,
+                h: Math.random() * 40 + 18,
+                speed: Math.random() * 0.18 + 0.05,
+                opacity: Math.random() * 0.08 + 0.03,
+                seed: Math.random() * 1000
             });
         }
     }
 
     update(dt) {
-        this.sunAngle += 0.0005 * dt;
-        this.rayAngle += 0.001 * dt;
+        this.time += dt;
+        this.sunAngle += 0.00042 * dt;
+        this.rayAngle += 0.00075 * dt;
+        this.heatWavePhase += 0.00045 * dt;
+
         this.dustParticles.forEach(p => {
             p.x += p.speed * dt * 0.03;
-            p.y += Math.sin(p.x * 0.01 + p.phase) * 0.3;
-            if (p.x > this.w + 10) { p.x = -10; p.y = Math.random() * this.h; }
+            p.y += Math.sin(p.x * 0.008 + p.phase) * 0.25;
+            if (p.x > this.w + 12) {
+                p.x = -12;
+                p.y = Math.random() * this.h;
+            }
+        });
+
+        this.cirrus.forEach(c => {
+            c.x += c.speed * dt * 0.02;
+            if (c.x > this.w + c.w) {
+                c.x = -c.w;
+                c.y = Math.random() * this.h * 0.42;
+            }
         });
     }
 
     render() {
         const { isDark } = this.getThemeColors();
         const ctx = this.ctx;
+        const noise = this.engine.noise;
 
+        // 大气层渐变（更接近真实晴空散射）
         const grad = ctx.createLinearGradient(0, 0, 0, this.h);
         if (isDark) {
             grad.addColorStop(0, '#0a1628');
-            grad.addColorStop(0.5, '#0f2040');
-            grad.addColorStop(1, '#162840');
+            grad.addColorStop(0.42, '#112746');
+            grad.addColorStop(1, '#183250');
         } else {
-            grad.addColorStop(0, '#3a7bd5');
-            grad.addColorStop(0.35, '#6db3f2');
-            grad.addColorStop(0.7, '#87CEEB');
-            grad.addColorStop(1, '#b8e4f9');
+            grad.addColorStop(0, '#2f74cf');
+            grad.addColorStop(0.34, '#66afea');
+            grad.addColorStop(0.7, '#92d1f4');
+            grad.addColorStop(1, '#d6edf9');
         }
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, this.w, this.h);
 
-        const sunX = this.w * 0.78;
-        const sunY = this.h * 0.18;
-        const sunR = 55;
+        const sunX = this.w * 0.79;
+        const sunY = this.h * 0.17;
+        const sunR = 58;
 
-        // 大范围光晕
-        const glowOuter = ctx.createRadialGradient(sunX, sunY, sunR * 0.3, sunX, sunY, sunR * 5);
+        // 太阳周围大气米氏散射光晕
+        const halo = ctx.createRadialGradient(sunX, sunY, sunR * 0.2, sunX, sunY, sunR * 7);
         if (isDark) {
-            glowOuter.addColorStop(0, 'rgba(255, 200, 80, 0.12)');
-            glowOuter.addColorStop(0.5, 'rgba(255, 180, 60, 0.04)');
-            glowOuter.addColorStop(1, 'rgba(255, 160, 40, 0)');
+            halo.addColorStop(0, 'rgba(255, 214, 110, 0.16)');
+            halo.addColorStop(0.45, 'rgba(255, 188, 70, 0.06)');
+            halo.addColorStop(1, 'rgba(255, 170, 40, 0)');
         } else {
-            glowOuter.addColorStop(0, 'rgba(255, 230, 120, 0.25)');
-            glowOuter.addColorStop(0.4, 'rgba(255, 210, 80, 0.1)');
-            glowOuter.addColorStop(1, 'rgba(255, 200, 60, 0)');
+            halo.addColorStop(0, 'rgba(255, 238, 150, 0.34)');
+            halo.addColorStop(0.42, 'rgba(255, 220, 90, 0.13)');
+            halo.addColorStop(1, 'rgba(255, 195, 40, 0)');
         }
-        ctx.fillStyle = glowOuter;
+        ctx.fillStyle = halo;
         ctx.fillRect(0, 0, this.w, this.h);
 
-        // 光芒射线
+        // 薄卷云
+        this.cirrus.forEach(c => {
+            const n = noise.fbm((c.seed + this.time * 0.00003) * 0.07, c.y * 0.002, 3, 2, 0.55);
+            const cy = c.y + n * 10;
+            const g = ctx.createLinearGradient(c.x, cy, c.x + c.w, cy + c.h);
+            g.addColorStop(0, `rgba(255,255,255,${c.opacity * 0.3})`);
+            g.addColorStop(0.5, `rgba(255,255,255,${c.opacity})`);
+            g.addColorStop(1, `rgba(255,255,255,0)`);
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.ellipse(c.x + c.w * 0.5, cy, c.w * 0.5, c.h, Math.sin(c.seed) * 0.2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // 太阳主光芒（缓慢旋转）
         ctx.save();
         ctx.translate(sunX, sunY);
         ctx.rotate(this.rayAngle);
-        for (let i = 0; i < 12; i++) {
-            ctx.rotate(Math.PI / 6);
+        for (let i = 0; i < 16; i++) {
+            ctx.rotate(Math.PI / 8);
+            const inner = sunR * 0.95;
+            const outer = sunR * (2.2 + (i % 2) * 0.35);
+            const rayGrad = ctx.createLinearGradient(inner, 0, outer, 0);
+            rayGrad.addColorStop(0, isDark ? 'rgba(255,220,140,0.08)' : 'rgba(255,250,190,0.16)');
+            rayGrad.addColorStop(1, 'rgba(255,240,160,0)');
+            ctx.fillStyle = rayGrad;
             ctx.beginPath();
-            ctx.moveTo(sunR * 0.9, 0);
-            ctx.lineTo(sunR * 3, -6);
-            ctx.lineTo(sunR * 3, 6);
+            ctx.moveTo(inner, -5);
+            ctx.lineTo(outer, 0);
+            ctx.lineTo(inner, 5);
             ctx.closePath();
-            ctx.fillStyle = isDark ? 'rgba(255, 200, 100, 0.04)' : 'rgba(255, 240, 160, 0.08)';
             ctx.fill();
         }
         ctx.restore();
 
-        // 太阳本体
-        const sunGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR);
+        // 太阳本体（中心更白，边缘偏黄）
+        const sunGrad = ctx.createRadialGradient(sunX - 6, sunY - 6, 0, sunX, sunY, sunR);
         if (isDark) {
-            sunGrad.addColorStop(0, '#ffe088');
-            sunGrad.addColorStop(0.7, '#ddb840');
-            sunGrad.addColorStop(1, '#bb8800');
+            sunGrad.addColorStop(0, '#fff0b8');
+            sunGrad.addColorStop(0.62, '#e8c765');
+            sunGrad.addColorStop(1, '#c58f1d');
         } else {
-            sunGrad.addColorStop(0, '#fffbe8');
-            sunGrad.addColorStop(0.6, '#ffe55c');
-            sunGrad.addColorStop(1, '#f5a623');
+            sunGrad.addColorStop(0, '#fffdf0');
+            sunGrad.addColorStop(0.58, '#ffe97f');
+            sunGrad.addColorStop(1, '#f4ae2f');
         }
         ctx.beginPath();
         ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
         ctx.fillStyle = sunGrad;
         ctx.fill();
 
+        // 镜头炫光（更真实的太阳视感）
+        const flareAngle = Math.atan2(this.h * 0.72 - sunY, this.w * 0.2 - sunX);
+        for (let i = 1; i <= 5; i++) {
+            const t = i / 6;
+            const fx = sunX + Math.cos(flareAngle) * this.w * t * 0.9;
+            const fy = sunY + Math.sin(flareAngle) * this.h * t * 0.9;
+            const fr = (1 - t) * 22 + 6;
+            const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr);
+            fg.addColorStop(0, isDark ? `rgba(255,220,170,${0.05 + 0.03 * (1 - t)})` : `rgba(255,240,190,${0.12 + 0.05 * (1 - t)})`);
+            fg.addColorStop(1, 'rgba(255,240,180,0)');
+            ctx.fillStyle = fg;
+            ctx.beginPath();
+            ctx.arc(fx, fy, fr, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 近地层热浪（抖动折射感）
+        const bandTop = this.h * 0.64;
+        for (let y = bandTop; y < this.h; y += 3) {
+            const t = (y - bandTop) / (this.h - bandTop);
+            const shift = Math.sin(y * 0.035 + this.heatWavePhase * 9) * (0.6 + t * 1.8);
+            const alpha = (isDark ? 0.025 : 0.045) * (0.4 + t);
+            ctx.strokeStyle = `rgba(255, 240, 210, ${alpha})`;
+            ctx.beginPath();
+            ctx.moveTo(0 + shift, y);
+            ctx.lineTo(this.w + shift, y);
+            ctx.stroke();
+        }
+
         // 浮尘粒子
         this.dustParticles.forEach(p => {
+            const tw = 0.65 + 0.35 * Math.sin(this.time * 0.0012 + p.phase);
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            ctx.fillStyle = isDark ? `rgba(200, 210, 255, ${p.opacity * 0.4})` : `rgba(255, 255, 255, ${p.opacity})`;
+            ctx.fillStyle = isDark
+                ? `rgba(210, 220, 255, ${p.opacity * 0.45 * tw})`
+                : `rgba(255, 255, 255, ${p.opacity * tw})`;
             ctx.fill();
         });
     }
@@ -493,7 +620,9 @@ class CloudyScene extends BaseScene {
     setup() {
         this.time = 0;
         this.clouds = [];
-        const count = Math.max(5, Math.floor(this.w / 180));
+        this.windDrift = 0;
+
+        const count = this.engine.scaleCount(Math.max(7, Math.floor(this.w / 150)), 5, 'scene');
         for (let i = 0; i < count; i++) {
             this.clouds.push(this.createCloud(i, count));
         }
@@ -501,26 +630,36 @@ class CloudyScene extends BaseScene {
 
     createCloud(index, total) {
         const layer = Math.floor(Math.random() * 3); // 0=远 1=中 2=近
-        const depthScale = [0.5, 0.75, 1][layer];
-        const baseW = (Math.random() * 200 + 180) * depthScale;
+        const depthScale = [0.45, 0.72, 1][layer];
+        const baseW = (Math.random() * 230 + 170) * depthScale;
         return {
             x: Math.random() * (this.w + baseW) - baseW * 0.5,
-            y: Math.random() * this.h * 0.45 + this.h * 0.05 * layer,
+            y: Math.random() * this.h * 0.46 + this.h * 0.02 * layer,
             w: baseW,
-            h: baseW * (0.3 + Math.random() * 0.15),
-            speed: (Math.random() * 0.3 + 0.12) * depthScale * (Math.random() < 0.5 ? 1 : -1),
-            opacity: (0.3 + Math.random() * 0.3) * (layer === 0 ? 0.5 : layer === 1 ? 0.7 : 1),
-            layer: layer,
+            h: baseW * (0.28 + Math.random() * 0.18),
+            speed: (Math.random() * 0.28 + 0.1) * depthScale * (Math.random() < 0.55 ? 1 : -1),
+            opacity: (0.28 + Math.random() * 0.34) * (layer === 0 ? 0.52 : layer === 1 ? 0.75 : 1),
+            layer,
             seed: Math.random() * 1000
         };
     }
 
     update(dt) {
         this.time += dt;
+        this.windDrift += dt * 0.00006;
+
         this.clouds.forEach(c => {
-            c.x += c.speed * dt * 0.025;
-            if (c.speed > 0 && c.x > this.w + c.w) { c.x = -c.w; c.y = Math.random() * this.h * 0.45 + this.h * 0.05 * c.layer; }
-            if (c.speed < 0 && c.x < -c.w) { c.x = this.w + c.w; c.y = Math.random() * this.h * 0.45 + this.h * 0.05 * c.layer; }
+            const sway = Math.sin((this.time + c.seed * 20) * 0.00025) * 0.16;
+            c.x += (c.speed + sway) * dt * 0.025;
+
+            if (c.speed > 0 && c.x > this.w + c.w) {
+                c.x = -c.w;
+                c.y = Math.random() * this.h * 0.46 + this.h * 0.02 * c.layer;
+            }
+            if (c.speed < 0 && c.x < -c.w) {
+                c.x = this.w + c.w;
+                c.y = Math.random() * this.h * 0.46 + this.h * 0.02 * c.layer;
+            }
         });
     }
 
@@ -529,26 +668,75 @@ class CloudyScene extends BaseScene {
         const ctx = this.ctx;
         const noise = this.engine.noise;
 
-        // 天空渐变
+        // 蓝天底色
         const grad = ctx.createLinearGradient(0, 0, 0, this.h);
         if (isDark) {
-            grad.addColorStop(0, '#1a2332');
-            grad.addColorStop(0.5, '#1e2d42');
-            grad.addColorStop(1, '#2a3a4a');
+            grad.addColorStop(0, '#172337');
+            grad.addColorStop(0.5, '#21354e');
+            grad.addColorStop(1, '#30445a');
         } else {
-            grad.addColorStop(0, '#5b93c9');
-            grad.addColorStop(0.3, '#7fb5e0');
-            grad.addColorStop(0.7, '#a8d4f0');
-            grad.addColorStop(1, '#c8dff0');
+            grad.addColorStop(0, '#4d89c4');
+            grad.addColorStop(0.34, '#79b3de');
+            grad.addColorStop(0.7, '#a9d2ec');
+            grad.addColorStop(1, '#d2e7f5');
         }
         ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, this.w, this.h);
+
+        const sunX = this.w * 0.74;
+        const sunY = this.h * 0.16;
+
+        // 云遮日估算（用于实时亮度变化）
+        let occlusion = 0;
+        this.clouds.forEach(c => {
+            const cx = c.x + c.w * 0.5;
+            const cy = c.y + c.h * 0.5;
+            const dx = (cx - sunX) / (c.w * 0.68);
+            const dy = (cy - sunY) / (c.h * 0.85);
+            const influence = Math.exp(-(dx * dx + dy * dy));
+            occlusion += influence * c.opacity * (0.36 + 0.24 * c.layer);
+        });
+        occlusion = Math.min(1, occlusion * 0.58);
+        const sunlight = 1 - occlusion * 0.48;
+
+        // 云后太阳漫射（随遮挡动态变化）
+        const sunGlow = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, this.w * 0.55);
+        sunGlow.addColorStop(0, isDark
+            ? `rgba(255,220,160,${0.04 + 0.05 * sunlight})`
+            : `rgba(255,245,200,${0.06 + 0.16 * sunlight})`);
+        sunGlow.addColorStop(1, 'rgba(255,240,200,0)');
+        ctx.fillStyle = sunGlow;
+        ctx.fillRect(0, 0, this.w, this.h);
+
+        // 大气透视雾层
+        const haze = ctx.createLinearGradient(0, this.h * 0.25, 0, this.h);
+        haze.addColorStop(0, 'rgba(255,255,255,0)');
+        haze.addColorStop(1, isDark ? 'rgba(120,150,190,0.08)' : 'rgba(220,235,248,0.14)');
+        ctx.fillStyle = haze;
         ctx.fillRect(0, 0, this.w, this.h);
 
         // 按层级排序绘制（远的先画）
         const sorted = [...this.clouds].sort((a, b) => a.layer - b.layer);
         sorted.forEach(c => {
-            CloudRenderer.drawCloud(ctx, c.x + c.w / 2, c.y + c.h / 2, c.w, c.h, c.opacity, isDark, this.time + c.seed, noise);
+            CloudRenderer.drawCloud(
+                ctx,
+                c.x + c.w / 2,
+                c.y + c.h / 2,
+                c.w,
+                c.h,
+                c.opacity,
+                isDark,
+                this.time + c.seed,
+                noise
+            );
         });
+
+        // 云遮日时的整体环境变暗（真实克制）
+        const dimAlpha = isDark ? occlusion * 0.12 : occlusion * 0.18;
+        if (dimAlpha > 0.01) {
+            ctx.fillStyle = `rgba(16, 24, 38, ${dimAlpha})`;
+            ctx.fillRect(0, 0, this.w, this.h);
+        }
     }
 }
 
@@ -557,7 +745,8 @@ class OvercastScene extends BaseScene {
     setup() {
         this.time = 0;
         this.cloudLayers = [];
-        for (let i = 0; i < 10; i++) {
+        const overcastLayerCount = this.engine.scaleCount(10, 4, 'scene');
+        for (let i = 0; i < overcastLayerCount; i++) {
             const layer = Math.floor(i / 3.3);
             const depthScale = [0.4, 0.65, 1][layer] || 1;
             const baseW = (Math.random() * 350 + 250) * depthScale;
@@ -600,14 +789,45 @@ class OvercastScene extends BaseScene {
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, this.w, this.h);
 
+        const sunX = this.w * 0.7;
+        const sunY = this.h * 0.2;
+
+        // 阴天也有弱光源，做“云遮日”微弱动态
+        let occlusion = 0;
+        this.cloudLayers.forEach(c => {
+            const cx = c.x + c.w * 0.5;
+            const cy = c.y + c.h * 0.5;
+            const dx = (cx - sunX) / (c.w * 0.8);
+            const dy = (cy - sunY) / (c.h * 0.95);
+            const influence = Math.exp(-(dx * dx + dy * dy));
+            occlusion += influence * c.opacity * (0.34 + 0.22 * c.layer);
+        });
+        occlusion = Math.min(1, occlusion * 0.62);
+
         // 整体灰蒙蒙的覆盖
         ctx.fillStyle = isDark ? 'rgba(30, 40, 60, 0.15)' : 'rgba(160, 180, 200, 0.15)';
+        ctx.fillRect(0, 0, this.w, this.h);
+
+        // 弱漫射，随着遮挡轻微变化
+        const weakSun = ctx.createRadialGradient(sunX, sunY, 20, sunX, sunY, this.w * 0.5);
+        weakSun.addColorStop(0, isDark
+            ? `rgba(200,210,230,${0.01 + (1 - occlusion) * 0.03})`
+            : `rgba(235,240,245,${0.02 + (1 - occlusion) * 0.05})`);
+        weakSun.addColorStop(1, 'rgba(220,230,240,0)');
+        ctx.fillStyle = weakSun;
         ctx.fillRect(0, 0, this.w, this.h);
 
         const sorted = [...this.cloudLayers].sort((a, b) => a.layer - b.layer);
         sorted.forEach(c => {
             CloudRenderer.drawCloud(ctx, c.x + c.w / 2, c.y + c.h / 2, c.w, c.h, c.opacity, isDark, this.time + c.seed, noise);
         });
+
+        // 阴天亮度变化更克制
+        const dimAlpha = isDark ? occlusion * 0.08 : occlusion * 0.12;
+        if (dimAlpha > 0.01) {
+            ctx.fillStyle = `rgba(18, 24, 36, ${dimAlpha})`;
+            ctx.fillRect(0, 0, this.w, this.h);
+        }
     }
 }
 
@@ -663,14 +883,18 @@ class RainScene extends BaseScene {
     setup() {
         this.time = 0;
         this.ripples = new RippleSystem();
-        this.windForce = 2.5;
+        this.windForce = 2.7;
         this.groundY = this.h - 4;
+        this.puddleBands = this.createPuddleBands();
+        this.mistPhase = Math.random() * Math.PI * 2;
+        this.currentWind = this.windForce;
+        this.gustStrength = 0;
 
         // 多层雨滴（远处小慢，近处大快）
         this.layers = [
-            { count: 60,  speedRange: [4, 7],   lenRange: [6, 10],   opacityRange: [0.1, 0.18], widthRange: [0.6, 0.8] },  // 远
-            { count: 100, speedRange: [8, 13],  lenRange: [12, 20],  opacityRange: [0.15, 0.28], widthRange: [0.8, 1.2] }, // 中
-            { count: 80,  speedRange: [14, 20], lenRange: [22, 38],  opacityRange: [0.2, 0.38], widthRange: [1.2, 1.8] }   // 近
+            { count: this.engine.scaleCount(90, 36, 'scene'), speedRange: [4, 7],   lenRange: [6, 12],   opacityRange: [0.08, 0.16], widthRange: [0.5, 0.75] },  // 远
+            { count: this.engine.scaleCount(140, 56, 'scene'), speedRange: [8, 14],  lenRange: [12, 22],  opacityRange: [0.14, 0.28], widthRange: [0.8, 1.25] }, // 中
+            { count: this.engine.scaleCount(120, 48, 'scene'), speedRange: [14, 22], lenRange: [22, 42],  opacityRange: [0.2, 0.42], widthRange: [1.2, 1.95] }   // 近
         ];
 
         this.raindrops = [];
@@ -684,13 +908,27 @@ class RainScene extends BaseScene {
         this.splashParticles = [];
     }
 
+    createPuddleBands() {
+        const bands = [];
+        const count = this.engine.scaleCount(8, 4, 'scene');
+        for (let i = 0; i < count; i++) {
+            bands.push({
+                y: this.h * (0.72 + i * 0.035 + Math.random() * 0.03),
+                h: 14 + Math.random() * 26,
+                opacity: 0.05 + Math.random() * 0.08,
+                wobble: Math.random() * Math.PI * 2
+            });
+        }
+        return bands;
+    }
+
     createRaindrop(layer, layerIndex, randomY = false) {
         const sr = layer.speedRange;
         const lr = layer.lenRange;
         const or = layer.opacityRange;
         const wr = layer.widthRange;
         return {
-            x: Math.random() * (this.w + 150) - 75,
+            x: Math.random() * (this.w + 180) - 90,
             y: randomY ? Math.random() * this.h : -(Math.random() * this.h * 0.3 + lr[1]),
             speed: sr[0] + Math.random() * (sr[1] - sr[0]),
             length: lr[0] + Math.random() * (lr[1] - lr[0]),
@@ -703,17 +941,24 @@ class RainScene extends BaseScene {
     update(dt) {
         const factor = dt / 16.67;
         this.time += dt;
+        this.mistPhase += dt * 0.001;
+
+        // 阵风扰动（雨势更自然）
+        const gust = Math.sin(this.time * 0.00045) * 0.55 + Math.sin(this.time * 0.00012) * 0.35;
+        const dynamicWind = this.windForce + gust;
+        this.currentWind = dynamicWind;
+        this.gustStrength = Math.min(1, Math.abs(gust) / 0.9);
 
         this.raindrops.forEach(r => {
             r.y += r.speed * factor;
-            r.x += this.windForce * factor * (0.8 + r.layer * 0.15);
+            r.x += dynamicWind * factor * (0.8 + r.layer * 0.18);
 
             if (r.y > this.groundY) {
                 // 近层雨滴产生涟漪和水花
-                if (r.layer >= 1 && Math.random() < (r.layer === 2 ? 0.5 : 0.25)) {
-                    this.ripples.add(r.x, this.groundY, r.width * 3);
+                if (r.layer >= 1 && Math.random() < (r.layer === 2 ? 0.56 : 0.3)) {
+                    this.ripples.add(r.x, this.groundY, r.width * 3.2);
                 }
-                if (r.layer === 2 && Math.random() < 0.3) {
+                if (r.layer === 2 && Math.random() < 0.34) {
                     this.addSplash(r.x, this.groundY);
                 }
 
@@ -736,15 +981,15 @@ class RainScene extends BaseScene {
     }
 
     addSplash(x, y) {
-        const count = 2 + Math.floor(Math.random() * 3);
+        const count = 3 + Math.floor(Math.random() * 3);
         for (let i = 0; i < count; i++) {
-            const angle = -Math.PI * (0.2 + Math.random() * 0.6);
-            const speed = 1 + Math.random() * 2;
+            const angle = -Math.PI * (0.18 + Math.random() * 0.64);
+            const speed = 1 + Math.random() * 2.4;
             this.splashParticles.push({
                 x, y,
                 vx: Math.cos(angle) * speed * (Math.random() < 0.5 ? 1 : -1),
                 vy: Math.sin(angle) * speed,
-                size: 0.8 + Math.random() * 1.2,
+                size: 0.8 + Math.random() * 1.3,
                 life: 1
             });
         }
@@ -753,40 +998,111 @@ class RainScene extends BaseScene {
     render() {
         const { isDark } = this.getThemeColors();
         const ctx = this.ctx;
+        const noise = this.engine.noise;
 
         // 天空
         const grad = ctx.createLinearGradient(0, 0, 0, this.h);
         if (isDark) {
-            grad.addColorStop(0, '#0c1830');
-            grad.addColorStop(0.5, '#12243e');
-            grad.addColorStop(1, '#1a2848');
+            grad.addColorStop(0, '#0b172e');
+            grad.addColorStop(0.46, '#132845');
+            grad.addColorStop(1, '#1c3052');
         } else {
-            grad.addColorStop(0, '#3a5a8a');
-            grad.addColorStop(0.4, '#4a6e9e');
-            grad.addColorStop(1, '#5a7a9a');
+            grad.addColorStop(0, '#355a8b');
+            grad.addColorStop(0.42, '#4a719f');
+            grad.addColorStop(1, '#637f9f');
         }
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, this.w, this.h);
 
-        // 地面湿润反光
-        const groundGrad = ctx.createLinearGradient(0, this.groundY - 20, 0, this.h);
-        groundGrad.addColorStop(0, 'transparent');
-        groundGrad.addColorStop(0.3, isDark ? 'rgba(20, 40, 70, 0.3)' : 'rgba(50, 80, 120, 0.15)');
-        groundGrad.addColorStop(1, isDark ? 'rgba(15, 30, 55, 0.5)' : 'rgba(40, 65, 100, 0.25)');
-        ctx.fillStyle = groundGrad;
-        ctx.fillRect(0, this.groundY - 20, this.w, this.h - this.groundY + 20);
+        // 雨雾层（近地层更浓）
+        const mistGrad = ctx.createLinearGradient(0, this.h * 0.35, 0, this.h);
+        mistGrad.addColorStop(0, 'rgba(180,200,220,0)');
+        mistGrad.addColorStop(1, isDark ? 'rgba(130,155,190,0.16)' : 'rgba(200,215,230,0.2)');
+        ctx.fillStyle = mistGrad;
+        ctx.fillRect(0, 0, this.w, this.h);
 
-        // 雨滴
+        // 地面积水反光（条带模拟积水面）
+        this.puddleBands.forEach((b, idx) => {
+            const tw = 0.6 + 0.4 * Math.sin(this.time * 0.0018 + b.wobble + idx * 0.9);
+            const g = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+            g.addColorStop(0, `rgba(180,210,240,${b.opacity * 0.5 * tw})`);
+            g.addColorStop(0.5, `rgba(120,160,210,${b.opacity * tw})`);
+            g.addColorStop(1, `rgba(90,130,180,0)`);
+            ctx.fillStyle = g;
+            ctx.fillRect(0, b.y, this.w, b.h);
+
+            // 轻微真实：积水中的云层倒影扰动（随风向轻度联动）
+            const bandBottom = b.y + b.h;
+            const segments = 6;
+            const windTiltBase = this.currentWind * 0.125;
+            const windPulse = Math.sin(this.time * 0.00035 + idx * 0.6) * (0.16 + this.gustStrength * 0.12);
+            const gustBoost = 0.9 + this.gustStrength * 0.22;
+            const windTilt = (windTiltBase + windPulse) * gustBoost;
+            for (let s = 0; s < segments; s++) {
+                const t = s / (segments - 1);
+                const yy = b.y + t * b.h;
+                const nx = (this.time * 0.00006) + idx * 0.21 + t * 0.8;
+                const ny = 0.4 + idx * 0.17;
+                const wobble = noise.fbm(nx, ny, 3, 2, 0.55);
+                const alphaBase = (isDark ? 0.012 : 0.018) * (0.9 - t * 0.35);
+                const alpha = alphaBase * (0.7 + Math.abs(wobble) * 0.9);
+                const xShift = wobble * (1.6 + t * 1.2) + windTilt * (0.55 + t * 0.85);
+                const curveTilt = windTilt * (0.4 + t * 0.7);
+                ctx.strokeStyle = `rgba(190, 210, 230, ${alpha})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0 + xShift, yy);
+                ctx.quadraticCurveTo(this.w * 0.5 + xShift * 0.6 + curveTilt, yy + wobble * 2, this.w + xShift + curveTilt, yy);
+                ctx.stroke();
+            }
+
+
+            // 反光衰减遮罩，避免倒影过于明显
+            const fade = ctx.createLinearGradient(0, b.y, 0, bandBottom);
+            fade.addColorStop(0, 'rgba(0,0,0,0)');
+            fade.addColorStop(1, isDark ? 'rgba(8,12,20,0.1)' : 'rgba(90,110,140,0.07)');
+            ctx.fillStyle = fade;
+            ctx.fillRect(0, b.y, this.w, b.h);
+        });
+
+        // 主地面湿润层
+        const groundGrad = ctx.createLinearGradient(0, this.groundY - 24, 0, this.h);
+        groundGrad.addColorStop(0, 'transparent');
+        groundGrad.addColorStop(0.3, isDark ? 'rgba(22, 46, 76, 0.34)' : 'rgba(58, 90, 128, 0.18)');
+        groundGrad.addColorStop(1, isDark ? 'rgba(14, 30, 56, 0.58)' : 'rgba(46, 70, 105, 0.3)');
+        ctx.fillStyle = groundGrad;
+        ctx.fillRect(0, this.groundY - 24, this.w, this.h - this.groundY + 24);
+
+        // 雨滴（主滴线 + 折射高光线，真实克制）
         ctx.lineCap = 'round';
         this.raindrops.forEach(r => {
-            const windOff = this.windForce * (0.8 + r.layer * 0.15) * (r.length / r.speed) * 0.5;
-            ctx.strokeStyle = isDark
-                ? `rgba(150, 180, 220, ${r.opacity})`
-                : `rgba(200, 220, 255, ${r.opacity})`;
+            const windOff = this.windForce * (0.8 + r.layer * 0.15) * (r.length / r.speed) * 0.55;
+            const headAlpha = r.opacity * 0.5;
+            const tailAlpha = r.opacity;
+            const dropGrad = ctx.createLinearGradient(r.x, r.y, r.x + windOff, r.y + r.length);
+            dropGrad.addColorStop(0, isDark ? `rgba(145,175,218,${headAlpha})` : `rgba(188,214,246,${headAlpha})`);
+            dropGrad.addColorStop(1, isDark ? `rgba(170,205,240,${tailAlpha})` : `rgba(220,236,255,${tailAlpha})`);
+            ctx.strokeStyle = dropGrad;
             ctx.lineWidth = r.width;
             ctx.beginPath();
             ctx.moveTo(r.x, r.y);
             ctx.lineTo(r.x + windOff, r.y + r.length);
+            ctx.stroke();
+
+            // 细高光：模拟雨滴对环境光的折射反光
+            const nx = -r.length;
+            const ny = windOff;
+            const nLen = Math.hypot(nx, ny) || 1;
+            const ox = (nx / nLen) * (0.35 + r.width * 0.18);
+            const oy = (ny / nLen) * (0.35 + r.width * 0.18);
+            const hiGrad = ctx.createLinearGradient(r.x + ox, r.y + oy, r.x + windOff + ox, r.y + r.length + oy);
+            hiGrad.addColorStop(0, isDark ? `rgba(220,235,255,${r.opacity * 0.08})` : `rgba(255,255,255,${r.opacity * 0.14})`);
+            hiGrad.addColorStop(1, isDark ? `rgba(230,242,255,${r.opacity * 0.2})` : `rgba(255,255,255,${r.opacity * 0.28})`);
+            ctx.strokeStyle = hiGrad;
+            ctx.lineWidth = Math.max(0.45, r.width * 0.38);
+            ctx.beginPath();
+            ctx.moveTo(r.x + ox, r.y + oy + r.length * 0.05);
+            ctx.lineTo(r.x + windOff + ox, r.y + r.length + oy);
             ctx.stroke();
         });
 
@@ -795,8 +1111,8 @@ class RainScene extends BaseScene {
 
         // 水花粒子
         this.splashParticles.forEach(s => {
-            ctx.globalAlpha = s.life * 0.6;
-            ctx.fillStyle = isDark ? 'rgba(160, 190, 230, 0.7)' : 'rgba(210, 230, 255, 0.8)';
+            ctx.globalAlpha = s.life * 0.62;
+            ctx.fillStyle = isDark ? 'rgba(168, 198, 235, 0.72)' : 'rgba(216, 234, 255, 0.84)';
             ctx.beginPath();
             ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
             ctx.fill();
@@ -811,11 +1127,12 @@ class SnowScene extends BaseScene {
         this.snowflakes = [];
         this.snowAccumulation = [];
 
-        for (let i = 0; i < 120; i++) {
+        const snowflakeCount = this.engine.scaleCount(120, 48, 'scene');
+        for (let i = 0; i < snowflakeCount; i++) {
             this.snowflakes.push(this.createSnowflake());
         }
 
-        const segments = 20;
+        const segments = this.engine.scaleCount(20, 8, 'scene');
         for (let i = 0; i <= segments; i++) {
             this.snowAccumulation.push({
                 x: (i / segments) * this.w,
@@ -915,7 +1232,8 @@ class FogScene extends BaseScene {
     setup() {
         this.time = 0;
         this.fogLayers = [];
-        for (let i = 0; i < 12; i++) {
+        const fogLayerCount = this.engine.scaleCount(12, 5, 'scene');
+        for (let i = 0; i < fogLayerCount; i++) {
             this.fogLayers.push({
                 x: Math.random() * this.w * 2 - this.w * 0.5,
                 y: Math.random() * this.h,
@@ -982,7 +1300,8 @@ class ThunderScene extends BaseScene {
         this.windForce = 4;
         this.groundY = this.h - 4;
 
-        for (let i = 0; i < 350; i++) {
+        const thunderRainCount = this.engine.scaleCount(350, 140, 'scene');
+        for (let i = 0; i < thunderRainCount; i++) {
             this.raindrops.push({
                 x: Math.random() * (this.w + 200) - 100,
                 y: Math.random() * this.h - this.h,
@@ -1132,7 +1451,8 @@ class NightScene extends BaseScene {
         this.meteorInterval = 20000 + Math.random() * 40000;
         this.meteors = [];
 
-        for (let i = 0; i < 120; i++) {
+        const starCount = this.engine.scaleCount(120, 50, 'scene');
+        for (let i = 0; i < starCount; i++) {
             this.stars.push({
                 x: Math.random() * this.w,
                 y: Math.random() * this.h * 0.7,
@@ -1269,18 +1589,16 @@ function setupCardDrops(maxDrops, maxDrips, dropInterval, dripSpeed) {
 // 收集页面上所有可见元素的位置
 function collectVisibleRects(w, h) {
     const rects = [];
-    const all = document.querySelectorAll('body *');
-    for (let i = 0; i < all.length; i++) {
-        const el = all[i];
-        const tag = el.tagName;
-        if (tag === 'CANVAS' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'BR') continue;
-        const style = getComputedStyle(el);
-        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+    const candidates = document.querySelectorAll('.category-group, .search-container, .greeting-pill, .weather-widget, .theme-toggle-btn');
+
+    for (let i = 0; i < candidates.length; i++) {
+        const el = candidates[i];
         const r = el.getBoundingClientRect();
         if (r.width < 30 || r.height < 10) continue;
         if (r.bottom < 0 || r.top > h) continue;
         rects.push({ left: r.left, top: r.top, width: r.width });
     }
+
     return rects;
 }
 
@@ -1411,13 +1729,19 @@ class RainForeground extends BaseForeground {
         this.drops = [];
         this.drips = [];
         this.dropTimer = 0;
-        this.dropInterval = 60;
+        this.dropInterval = this.engine.performanceProfile.lowPower ? 110 : 60;
 
-        for (let i = 0; i < 35; i++) {
+        const rainForegroundDropCount = this.engine.scaleCount(35, 14, 'foreground');
+        for (let i = 0; i < rainForegroundDropCount; i++) {
             this.drops.push(this.createDrop());
         }
 
-        this.cd = setupCardDrops(80, 50, 45, 0.35);
+        this.cd = setupCardDrops(
+            this.engine.scaleCount(80, 28, 'foreground'),
+            this.engine.scaleCount(50, 18, 'foreground'),
+            this.engine.performanceProfile.lowPower ? 90 : 45,
+            this.engine.performanceProfile.lowPower ? 0.28 : 0.35
+        );
     }
 
     createDrop() {
@@ -1528,7 +1852,8 @@ class RainForeground extends BaseForeground {
 class SnowForeground extends BaseForeground {
     setup() {
         this.flakes = [];
-        for (let i = 0; i < 40; i++) this.flakes.push(this.createFlake());
+        const foregroundSnowCount = this.engine.scaleCount(40, 16, 'foreground');
+        for (let i = 0; i < foregroundSnowCount; i++) this.flakes.push(this.createFlake());
     }
 
     createFlake() {
@@ -1592,9 +1917,16 @@ class ThunderForeground extends BaseForeground {
         this.drips = [];
         this.flashOpacity = 0;
         this.dropTimer = 0;
-        for (let i = 0; i < 50; i++) this.drops.push(this.createDrop());
 
-        this.cd = setupCardDrops(100, 60, 30, 0.45);
+        const thunderForegroundDropCount = this.engine.scaleCount(50, 20, 'foreground');
+        for (let i = 0; i < thunderForegroundDropCount; i++) this.drops.push(this.createDrop());
+
+        this.cd = setupCardDrops(
+            this.engine.scaleCount(100, 35, 'foreground'),
+            this.engine.scaleCount(60, 22, 'foreground'),
+            this.engine.performanceProfile.lowPower ? 70 : 30,
+            this.engine.performanceProfile.lowPower ? 0.35 : 0.45
+        );
     }
 
     createDrop() {
@@ -1714,7 +2046,8 @@ class ThunderForeground extends BaseForeground {
 class FogForeground extends BaseForeground {
     setup() {
         this.particles = [];
-        for (let i = 0; i < 8; i++) {
+        const fogParticleCount = this.engine.scaleCount(8, 3, 'foreground');
+        for (let i = 0; i < fogParticleCount; i++) {
             this.particles.push({
                 x: Math.random() * this.w * 2 - this.w * 0.5,
                 y: Math.random() * this.h,
@@ -1752,7 +2085,8 @@ class FogForeground extends BaseForeground {
 class NightForeground extends BaseForeground {
     setup() {
         this.particles = [];
-        for (let i = 0; i < 15; i++) {
+        const nightParticleCount = this.engine.scaleCount(15, 6, 'foreground');
+        for (let i = 0; i < nightParticleCount; i++) {
             this.particles.push({
                 x: Math.random() * this.w,
                 y: Math.random() * this.h,

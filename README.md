@@ -9,44 +9,76 @@
 
 ## ✨ 核心特性
 
-- 🕒 **智能问候系统**: 集成 [提摩科技节假日 API](https://timor.tech/)。不仅仅是根据时间，更会根据当天是工作日、周末还是节假日，为你送上最贴心的问候。
-- 🔍 **聚合搜索**: 支持百度、Bing、Google 多引擎一键切换，记住你的搜索习惯。
-- 🎨 **极简设计**: 采用 Glassmorphism（玻璃拟态）风格，背景动态光晕，带来极致视觉享受。
-- 📱 **PWA 支持**: 完美适配渐进式 Web 应用，可安装至桌面，离线也可用，秒开体验。
-- ⌨️ **快捷键支持**: 
-    - `/`: 快速聚焦搜索框
-    - `Tab`: 在搜索框聚焦时循环切换搜索引擎
-- 🌓 **深色模式**: 自动跟随系统主题，保护视力。
+- 🕒 **智能问候系统**: 集成 [提摩科技节假日 API](https://timor.tech/)，根据工作日/周末/节假日输出不同问候。
+- 🌤 **实时天气与动态动画**: 自动定位 + 天气数据展示 + 全屏天气动画。
+- 🔍 **聚合搜索**: 支持百度、Bing、Google 多引擎切换。
+- 🎨 **极简设计**: Glassmorphism 风格，动态背景，深色模式。
+- 📱 **PWA 支持**: 可安装、可离线访问（App Shell 缓存）。
+- ⌨️ **快捷键支持**:
+  - `/`: 快速聚焦搜索框
+  - `Tab`: 在搜索框聚焦时循环切换搜索引擎
 
-## 🚀 快速开始
+## 🚀 运行模式
 
-### 部署到 Cloudflare Pages
+### 模式 A：PWA（推荐部署方式）
 
-1. **Fork 本仓库**: 点击右上角的 Fork 按钮。
-2. **连接 Cloudflare**: 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)，进入 `Workers & Pages` -> `Create application` -> `Pages` -> `Connect to Git`。
-3. **完成配置**: 选择 Fork 的仓库，框架预设选择 `None`，构建命令留空，发布目录填 `/`。
-4. **即刻访问**: 每次推送代码，Cloudflare 都会自动完成部署。
+适用于 Cloudflare Pages / 普通静态站点。
 
-### 本地运行
+- 使用 `manifest.webmanifest`
+- 注册 `sw.js`
+- 天气数据通过同源代理接口 `/api/weather`
 
-直接在浏览器中打开 `index.html` 即可使用。通过本地 HTTP 服务器（如 `npx serve`）运行以获得完整的 Service Worker 支持。
+### 模式 B：Chrome New Tab 扩展
+
+适用于浏览器扩展场景。
+
+- 使用 `manifest.json`（`chrome_url_overrides`）
+- 直接覆盖新标签页
+- 仍可请求同源天气代理（需你在扩展承载域部署对应接口）
+
+## ☁️ Cloudflare Pages 部署（含天气代理）
+
+1. Fork 本仓库。
+2. 在 Cloudflare Dashboard 连接仓库并创建 Pages 项目。
+3. 构建配置保持：
+   - Framework preset: `None`
+   - Build command: 留空
+   - Output directory: `/`
+4. 在项目设置中添加环境变量：
+   - `QWEATHER_API_KEY=<你的和风天气Key>`
+5. 推送代码后自动部署。
+
+本项目包含 Pages Functions：`functions/api/weather.js`，用于代理和风天气请求，前端不再存储 API Key。
+
+## 🧪 本地运行
+
+建议通过本地 HTTP 服务器启动（避免 file:// 下 SW 行为受限）：
+
+```bash
+npx serve .
+```
+
+然后访问输出的本地地址。
 
 ## 🛠️ 技术栈
 
-- **HTML5 / CSS3**: 使用 CSS 变量实现主题切换，Flex/Grid 布局。
-- **Vanilla JavaScript**: 严控依赖，追求极致的加载速度和运行效率。
-- **Service Worker**: 实现 PWA 离线缓存逻辑。
+- **HTML5 / CSS3**: CSS 变量 + 主题切换 + 响应式布局
+- **Vanilla JavaScript**: 无框架、低依赖
+- **Service Worker**: 同源资源缓存与离线回退
+- **Cloudflare Pages Functions**: 天气代理与密钥保护
 
 ## 📁 目录结构
 
 ```text
 .
-├── css/             # 样式文件
-├── js/              # 核心逻辑 (data.js 存放书签数据)
-├── img/             # 图标及资源文件
-├── index.html       # 入口文件
-├── manifest.json    # PWA 清单
-└── sw.js            # Service Worker
+├── css/                    # 样式文件
+├── js/                     # 前端逻辑（data/main/weather/animation）
+├── img/                    # 图标与资源
+├── functions/api/weather.js# 天气代理（服务端）
+├── index.html              # 入口文件
+├── manifest.json           # Chrome 扩展清单
+├── manifest.webmanifest    # PWA 清单
+└── sw.js                   # Service Worker
 ```
 
 ## 📄 开源协议

@@ -1,413 +1,601 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // ========================================
-    // 1. Theme Management
-    // ========================================
-    const themeToggle = document.getElementById('theme-toggle');
-
-    const getPreferredTheme = () => {
-        const saved = localStorage.getItem('theme');
-        if (saved) return saved;
-        return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    };
-
-    const applyTheme = (theme) => {
-        document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('theme', theme);
-        if (window._weatherEngine) {
-            window._weatherEngine.onThemeChange(theme);
+    const fetchJsonWithTimeout = async (url, { timeout = 5000 } = {}) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
+        try {
+            const res = await fetch(url, { signal: controller.signal });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return await res.json();
+        } finally {
+            clearTimeout(timer);
         }
     };
 
-    // Apply saved or system theme
-    applyTheme(getPreferredTheme());
+    const createStorageTTLCache = ({ prefix, ttlMs, maxEntries = 100 }) => {
+        const keyFor = (key) => `${prefix}_${key}`;
 
-    // Toggle theme
-    if (themeToggle) {
-        themeToggle.addEventListener('click', () => {
-            const current = document.documentElement.getAttribute('data-theme');
-            applyTheme(current === 'dark' ? 'light' : 'dark');
-        });
-    }
-
-    // Listen for system theme changes
-    window.matchMedia?.('(prefers-color-scheme: dark)')
-        .addEventListener('change', (e) => {
-            if (!localStorage.getItem('theme')) {
-                applyTheme(e.matches ? 'dark' : 'light');
+        const parse = (raw) => {
+            try {
+                const data = JSON.parse(raw);
+                if (!data || typeof data !== 'object') return null;
+                if (typeof data.expiresAt !== 'number') return null;
+                return data;
+            } catch {
+                return null;
             }
-        });
+        };
 
-    // ========================================
-    // 2. Render Bookmarks
-    // ========================================
-    const container = document.getElementById('bookmarks-container');
+        const remove = (key) => {
+            try {
+                localStorage.removeItem(keyFor(key));
+            } catch {
+                // ignore storage failure
+            }
+        };
 
-    const handleImageError = (img) => {
-        img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIvPjxsaW5lIHgxPSIxMiIgeTE9IjgiIHgyPSIxMiIgeTI9IjEyIi8+PGxpbmUgeD0iMTIiIHkxPSIxNiIgeDI9IjEyLjAxIiB5MT0iMTYiLz48L3N2Zz4=';
+        const prune = () => {
+            const now = Date.now();
+            const records = [];
+
+            for (let i = 0; i < localStorage.length; i++) {
+                const storageKey = localStorage.key(i);
+                if (!storageKey || !storageKey.startsWith(`${prefix}_`)) continue;
+
+                const parsed = parse(localStorage.getItem(storageKey));
+                if (!parsed || parsed.expiresAt <= now) {
+                    localStorage.removeItem(storageKey);
+                    continue;
+                }
+
+                records.push({
+                    storageKey,
+                    updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : 0
+                });
+            }
+
+            if (records.length <= maxEntries) return;
+
+            records
+                .sort((a, b) => a.updatedAt - b.updatedAt)
+                .slice(0, records.length - maxEntries)
+                .forEach((item) => localStorage.removeItem(item.storageKey));
+        };
+
+        const get = (key) => {
+            const cacheKey = keyFor(key);
+            const parsed = parse(localStorage.getItem(cacheKey));
+            if (!parsed) {
+                localStorage.removeItem(cacheKey);
+                return null;
+            }
+
+            if (parsed.expiresAt <= Date.now()) {
+                localStorage.removeItem(cacheKey);
+                return null;
+            }
+
+            return parsed.value;
+        };
+
+        const set = (key, value) => {
+            const now = Date.now();
+            const payload = {
+                value,
+                updatedAt: now,
+                expiresAt: now + ttlMs
+            };
+
+            try {
+                localStorage.setItem(keyFor(key), JSON.stringify(payload));
+                prune();
+            } catch {
+                // ignore storage failure
+            }
+        };
+
+        return {
+            get,
+            set,
+            remove,
+            prune
+        };
     };
 
-    bookmarksData.forEach((category, index) => {
-        const categoryGroup = document.createElement('div');
-        categoryGroup.className = 'category-group';
-        // Staggered animation delay
-        categoryGroup.style.transitionDelay = `${index * 0.08}s`;
-
-        const title = document.createElement('h2');
-        title.className = 'category-title';
-        title.textContent = category.name;
-
-        const grid = document.createElement('div');
-        grid.className = 'links-grid';
-
-        category.sites.forEach(item => {
-            const link = document.createElement('a');
-            link.href = item.url;
-            link.className = 'link-item';
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-
-            const icon = document.createElement('img');
-            icon.src = item.icon;
-            icon.alt = item.name;
-            icon.className = 'link-icon';
-            icon.loading = 'lazy';
-            icon.onerror = () => handleImageError(icon);
-
-            const name = document.createElement('span');
-            name.className = 'link-name';
-            name.textContent = item.name;
-
-            link.appendChild(icon);
-            link.appendChild(name);
-            grid.appendChild(link);
-        });
-
-        categoryGroup.appendChild(title);
-        categoryGroup.appendChild(grid);
-        container.appendChild(categoryGroup);
+    const holidayCache = createStorageTTLCache({
+        prefix: 'ss_cache_holiday',
+        // 节假日信息变化频率很低，缓存 35 天并定期清理
+        ttlMs: 35 * 24 * 60 * 60 * 1000,
+        maxEntries: 150
     });
 
-    // ========================================
-    // 3. Card Entry Animations
-    // ========================================
-    const animateCards = () => {
-        const cards = document.querySelectorAll('.category-group');
-
-        if ('IntersectionObserver' in window) {
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.classList.add('visible');
-                        observer.unobserve(entry.target);
+    const initTheme = () => {
+        const themeToggle = document.getElementById('theme-toggle');
+        const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+        const themeStorage = (() => {
+            try {
+                const testKey = '__ss_theme_test__';
+                localStorage.setItem(testKey, '1');
+                localStorage.removeItem(testKey);
+                return {
+                    get: () => localStorage.getItem('theme'),
+                    set: (value) => localStorage.setItem('theme', value),
+                    remove: () => localStorage.removeItem('theme')
+                };
+            } catch {
+                let inMemoryTheme = null;
+                return {
+                    get: () => inMemoryTheme,
+                    set: (value) => {
+                        inMemoryTheme = String(value || '');
+                    },
+                    remove: () => {
+                        inMemoryTheme = null;
                     }
-                });
-            }, {
-                threshold: 0.1,
-                rootMargin: '0px 0px -30px 0px'
+                };
+            }
+        })();
+
+        const getPreferredTheme = () => {
+            const saved = themeStorage.get();
+            if (saved) return saved;
+            return mediaQuery?.matches ? 'dark' : 'light';
+        };
+
+        const applyTheme = (theme, { persist = true } = {}) => {
+            document.documentElement.setAttribute('data-theme', theme);
+            if (persist) {
+                themeStorage.set(theme);
+            }
+            if (window._weatherEngine) {
+                window._weatherEngine.onThemeChange(theme);
+            }
+        };
+
+        applyTheme(getPreferredTheme(), { persist: false });
+
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                const current = document.documentElement.getAttribute('data-theme');
+                applyTheme(current === 'dark' ? 'light' : 'dark');
+            });
+        }
+
+        if (mediaQuery && typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', (e) => {
+                if (!themeStorage.get()) {
+                    applyTheme(e.matches ? 'dark' : 'light', { persist: false });
+                }
+            });
+        }
+    };
+
+    const initBookmarks = () => {
+        const container = document.getElementById('bookmarks-container');
+        if (!container || !Array.isArray(bookmarksData)) return;
+
+        const handleImageError = (img) => {
+            img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIvPjxsaW5lIHgxPSIxMiIgeTE9IjgiIHgyPSIxMiIgeTI9IjEyIi8+PGxpbmUgeD0iMTIiIHkxPSIxNiIgeDI9IjEyLjAxIiB5MT0iMTYiLz48L3N2Zz4=';
+        };
+
+        const categoriesFragment = document.createDocumentFragment();
+
+        bookmarksData.forEach((category, index) => {
+            const categoryGroup = document.createElement('div');
+            categoryGroup.className = 'category-group';
+            categoryGroup.style.transitionDelay = `${index * 0.08}s`;
+
+            const title = document.createElement('h2');
+            title.className = 'category-title';
+            title.textContent = category.name;
+
+            const grid = document.createElement('div');
+            grid.className = 'links-grid';
+
+            const linksFragment = document.createDocumentFragment();
+            category.sites.forEach((item) => {
+                const link = document.createElement('a');
+                link.href = item.url;
+                link.className = 'link-item';
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+
+                const icon = document.createElement('img');
+                icon.src = item.icon;
+                icon.alt = item.name;
+                icon.className = 'link-icon';
+                icon.loading = 'lazy';
+                icon.onerror = () => handleImageError(icon);
+
+                const name = document.createElement('span');
+                name.className = 'link-name';
+                name.textContent = item.name;
+
+                link.appendChild(icon);
+                link.appendChild(name);
+                linksFragment.appendChild(link);
             });
 
-            cards.forEach(card => observer.observe(card));
-        } else {
-            // Fallback: make all visible
-            cards.forEach(card => card.classList.add('visible'));
-        }
+            grid.appendChild(linksFragment);
+            categoryGroup.appendChild(title);
+            categoryGroup.appendChild(grid);
+            categoriesFragment.appendChild(categoryGroup);
+        });
+
+        container.appendChild(categoriesFragment);
     };
 
-    // Trigger after a tiny delay for smooth entry
-    requestAnimationFrame(() => {
-        requestAnimationFrame(animateCards);
-    });
+    const initCardAnimations = () => {
+        const animateCards = () => {
+            const cards = document.querySelectorAll('.category-group');
 
-    // ========================================
-    // 4. Time & Date & Greeting
-    // ========================================
-    const timeEl = document.getElementById('time');
-    const dateEl = document.getElementById('date');
-    const greetingText = document.getElementById('greeting-text');
-    const greetingIcon = document.getElementById('greeting-icon');
+            if ('IntersectionObserver' in window) {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add('visible');
+                            observer.unobserve(entry.target);
+                        }
+                    });
+                }, {
+                    threshold: 0.1,
+                    rootMargin: '0px 0px -30px 0px'
+                });
 
-    const updateTime = () => {
-        const now = new Date();
+                cards.forEach((card) => observer.observe(card));
+            } else {
+                cards.forEach((card) => card.classList.add('visible'));
+            }
+        };
 
-        if (timeEl) {
-            timeEl.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-        }
+        requestAnimationFrame(() => {
+            requestAnimationFrame(animateCards);
+        });
+    };
 
-        if (dateEl) {
-            dateEl.textContent = now.toLocaleDateString('zh-CN', { weekday: 'long', month: 'long', day: 'numeric' });
-        }
+    const initClockAndGreeting = () => {
+        const timeEl = document.getElementById('time');
+        const dateEl = document.getElementById('date');
+        const greetingText = document.getElementById('greeting-text');
+        const greetingIcon = document.getElementById('greeting-icon');
+
+        const isWorkDayByHolidayType = (status, fallbackIsWeekday) => {
+            // timor type 语义：0 工作日、1 周末、2 节假日、3 调休（补班）
+            if (status === 0 || status === 3) return true;
+            if (status === 1 || status === 2) return false;
+            return fallbackIsWeekday;
+        };
+
+        const getHolidayStatus = async (dateStr) => {
+            const cached = holidayCache.get(dateStr);
+            if (cached !== null && typeof cached !== 'undefined') {
+                const parsed = Number.parseInt(String(cached), 10);
+                return Number.isNaN(parsed) ? null : parsed;
+            }
+
+            const data = await fetchJsonWithTimeout(`https://timor.tech/api/holiday/info/${dateStr}`, { timeout: 3500 });
+            if (data.code === 0 && data.type && typeof data.type.type !== 'undefined') {
+                const status = Number(data.type.type);
+                if (!Number.isNaN(status)) {
+                    holidayCache.set(dateStr, status);
+                    return status;
+                }
+            }
+            return null;
+        };
+
+        const renderClock = () => {
+            const now = new Date();
+
+            if (timeEl) {
+                timeEl.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            }
+
+            if (dateEl) {
+                dateEl.textContent = now.toLocaleDateString('zh-CN', { weekday: 'long', month: 'long', day: 'numeric' });
+            }
+        };
 
         const updateGreeting = async () => {
             if (!greetingText || !greetingIcon) return;
 
+            const now = new Date();
             const hour = now.getHours();
             const dateStr = now.toISOString().split('T')[0];
 
-            let isWorkDay = now.getDay() !== 0 && now.getDay() !== 6;
+            const fallbackIsWeekday = now.getDay() !== 0 && now.getDay() !== 6;
+            let isWorkDay = fallbackIsWeekday;
 
             try {
-                const cached = localStorage.getItem(`holiday_${dateStr}`);
-                if (cached) {
-                    const status = JSON.parse(cached);
-                    isWorkDay = (status === 0 || status === 3);
-                } else {
-                    const res = await fetch(`https://timor.tech/api/holiday/info/${dateStr}`);
-                    const data = await res.json();
-                    if (data.code === 0) {
-                        const status = data.type.type;
-                        isWorkDay = (status === 2 || status === 3);
-                        localStorage.setItem(`holiday_${dateStr}`, JSON.stringify(status));
-                    }
-                }
+                const status = await getHolidayStatus(dateStr);
+                isWorkDay = isWorkDayByHolidayType(status, fallbackIsWeekday);
             } catch (e) {
-                console.log("节假日 API 调用失败，回退到普通周末判断", e);
+                console.log('节假日 API 调用失败，回退到普通周末判断', e);
             }
 
-            let greeting = "";
-            let icon = "";
+            let greeting = '';
+            let icon = '';
 
             if (hour >= 22 || hour < 5) {
-                greeting = isWorkDay ? "别卷了，早点休息。" : "夜深了，世界很安静。";
-                icon = "✨";
+                greeting = isWorkDay ? '别卷了，早点休息。' : '夜深了，世界很安静。';
+                icon = '✨';
             } else if (hour >= 5 && hour < 9) {
-                greeting = isWorkDay ? "上午好，开启元气满满的一天！" : "早安，享受慵懒的清晨。";
-                icon = "🌅";
+                greeting = isWorkDay ? '上午好，开启元气满满的一天！' : '早安，享受慵懒的清晨。';
+                icon = '🌅';
             } else if (hour >= 9 && hour < 12) {
-                greeting = isWorkDay ? "保持专注，高效工作。" : "慢慢来，生活不只有工作。";
-                icon = "☕";
+                greeting = isWorkDay ? '保持专注，高效工作。' : '慢慢来，生活不只有工作。';
+                icon = '☕';
             } else if (hour >= 12 && hour < 14) {
-                greeting = isWorkDay ? "午饭愉快，记得午睡。" : "美食和休息最配了。";
-                icon = "🍱";
+                greeting = isWorkDay ? '午饭愉快，记得午睡。' : '美食和休息最配了。';
+                icon = '🍱';
             } else if (hour >= 14 && hour < 18) {
-                greeting = isWorkDay ? "加油，离下班不远了。" : "享受悠闲的午后时光。";
-                icon = "🍵";
+                greeting = isWorkDay ? '加油，离下班不远了。' : '享受悠闲的午后时光。';
+                icon = '🍵';
             } else if (hour >= 18 && hour < 22) {
-                greeting = isWorkDay ? "下班快乐，享受属于你的时间。" : "别走太快，等等灵魂。";
-                icon = "🌙";
+                greeting = isWorkDay ? '下班快乐，享受属于你的时间。' : '别走太快，等等灵魂。';
+                icon = '🌙';
             }
 
             greetingText.textContent = greeting;
             greetingIcon.textContent = icon;
         };
 
+        renderClock();
         updateGreeting();
+
+        const startClockTicker = () => {
+            const tick = () => {
+                renderClock();
+                const now = new Date();
+                const delay = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+                setTimeout(tick, Math.max(200, delay));
+            };
+
+            const now = new Date();
+            const initialDelay = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+            setTimeout(tick, Math.max(200, initialDelay));
+        };
+
+        startClockTicker();
+        setInterval(updateGreeting, 10 * 60 * 1000);
     };
 
-    setInterval(updateTime, 1000);
-    updateTime();
+    const initSearch = () => {
+        const searchInput = document.getElementById('search-input');
+        const searchBtn = document.getElementById('search-btn');
+        const engineSelector = document.getElementById('engine-selector');
+        const engineDropdown = document.getElementById('engine-dropdown');
+        const currentEngineIcon = document.getElementById('current-engine-icon');
+        const engineOptions = document.querySelectorAll('.engine-option');
 
-    // ========================================
-    // 5. Search Functionality
-    // ========================================
-    const searchInput = document.getElementById('search-input');
-    const searchBtn = document.getElementById('search-btn');
-    const engineSelector = document.getElementById('engine-selector');
-    const engineDropdown = document.getElementById('engine-dropdown');
-    const currentEngineIcon = document.getElementById('current-engine-icon');
-    const engineOptions = document.querySelectorAll('.engine-option');
+        if (!searchInput || !searchBtn || !engineSelector || !engineDropdown || !currentEngineIcon || !engineOptions.length) {
+            return null;
+        }
 
-    let currentEngine = 'baidu';
+        let currentEngine = 'baidu';
 
-    const engines = {
-        baidu: 'https://www.baidu.com/s?wd=',
-        bing: 'https://cn.bing.com/search?q=',
-        google: 'https://www.google.com/search?q='
-    };
+        const engines = {
+            baidu: 'https://www.baidu.com/s?wd=',
+            bing: 'https://cn.bing.com/search?q=',
+            google: 'https://www.google.com/search?q='
+        };
 
-    const engineNames = {
-        baidu: '百度',
-        bing: 'Bing',
-        google: 'Google'
-    };
+        const engineNames = {
+            baidu: '百度',
+            bing: 'Bing',
+            google: 'Google'
+        };
 
-    // Toggle Dropdown
-    engineSelector.addEventListener('click', (e) => {
-        e.stopPropagation();
-        engineDropdown.classList.toggle('show');
-        engineSelector.classList.toggle('active');
-    });
+        const syncEngineUI = () => {
+            currentEngineIcon.textContent = engineNames[currentEngine];
+            engineOptions.forEach((opt) => {
+                opt.classList.toggle('active', opt.dataset.engine === currentEngine);
+            });
+        };
 
-    // Close dropdown on outside click
-    document.addEventListener('click', () => {
-        engineDropdown.classList.remove('show');
-        engineSelector.classList.remove('active');
-    });
-
-    // Handle Engine Selection
-    engineOptions.forEach(option => {
-        option.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const selectedEngine = option.dataset.engine;
-            currentEngine = selectedEngine;
-
-            currentEngineIcon.textContent = engineNames[selectedEngine];
-            engineOptions.forEach(opt => opt.classList.remove('active'));
-            option.classList.add('active');
-
+        const closeDropdown = () => {
             engineDropdown.classList.remove('show');
             engineSelector.classList.remove('active');
+        };
 
-            searchInput.focus();
-        });
-    });
+        const performSearch = () => {
+            const query = searchInput.value.trim();
+            if (query) {
+                window.open(engines[currentEngine] + encodeURIComponent(query), '_blank');
+            }
+        };
 
-    const performSearch = () => {
-        const query = searchInput.value.trim();
-        if (query) {
-            window.open(engines[currentEngine] + encodeURIComponent(query), '_blank');
-        }
-    };
-
-    searchBtn.addEventListener('click', performSearch);
-    searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') performSearch();
-    });
-
-    // ========================================
-    // 6. Keyboard Shortcuts
-    // ========================================
-    document.addEventListener('keydown', (e) => {
-        // Slash to Focus Search
-        if (e.key === '/' && document.activeElement !== searchInput) {
-            e.preventDefault();
-            searchInput.focus();
-        }
-
-        // Tab to Switch Engine (when search focused)
-        if (e.key === 'Tab' && document.activeElement === searchInput) {
-            e.preventDefault();
-
+        const cycleEngine = () => {
             const engineKeys = Object.keys(engines);
             const currentIndex = engineKeys.indexOf(currentEngine);
             const nextIndex = (currentIndex + 1) % engineKeys.length;
-            const nextEngine = engineKeys[nextIndex];
+            currentEngine = engineKeys[nextIndex];
+            syncEngineUI();
+        };
 
-            currentEngine = nextEngine;
-            currentEngineIcon.textContent = engineNames[nextEngine];
+        engineSelector.addEventListener('click', (e) => {
+            e.stopPropagation();
+            engineDropdown.classList.toggle('show');
+            engineSelector.classList.toggle('active');
+        });
 
-            engineOptions.forEach(opt => {
-                opt.classList.toggle('active', opt.dataset.engine === nextEngine);
+        document.addEventListener('click', closeDropdown);
+
+        engineOptions.forEach((option) => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const selectedEngine = option.dataset.engine;
+                if (selectedEngine && engines[selectedEngine]) {
+                    currentEngine = selectedEngine;
+                }
+                syncEngineUI();
+                closeDropdown();
+                searchInput.focus();
             });
-        }
+        });
 
-        // Escape to blur
-        if (e.key === 'Escape' && document.activeElement === searchInput) {
-            searchInput.blur();
-        }
-    });
+        searchBtn.addEventListener('click', performSearch);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
 
-    // ========================================
-    // 7. PWA Support (Conditional)
-    // ========================================
-    if (!window.location.protocol.includes('extension')) {
-        const link = document.createElement('link');
-        link.rel = 'manifest';
-        link.href = 'manifest.webmanifest';
-        document.head.appendChild(link);
+        syncEngineUI();
+
+        return {
+            searchInput,
+            cycleEngine
+        };
+    };
+
+    const initKeyboardShortcuts = (searchModule) => {
+        const searchInput = searchModule?.searchInput || null;
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '/' && searchInput && document.activeElement !== searchInput) {
+                e.preventDefault();
+                searchInput.focus();
+            }
+
+            if (e.key === 'Tab' && searchInput && document.activeElement === searchInput) {
+                e.preventDefault();
+                searchModule?.cycleEngine?.();
+            }
+
+            if (e.key === 'Escape' && searchInput && document.activeElement === searchInput) {
+                searchInput.blur();
+            }
+        });
+    };
+
+    const initPWA = () => {
+        if (window.location.protocol.includes('extension')) return;
+
+        if (!document.querySelector('link[rel="manifest"]')) {
+            const link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = 'manifest.webmanifest';
+            document.head.appendChild(link);
+        }
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
-                    .then(registration => {
+                    .then((registration) => {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
                     })
-                    .catch(err => {
+                    .catch((err) => {
                         console.log('ServiceWorker registration failed: ', err);
                     });
             });
         }
-    }
+    };
 
-    // ========================================
-    // 8. Weather Animation
-    // ========================================
-    if (typeof WeatherAnimationEngine !== 'undefined' && typeof WeatherService !== 'undefined') {
+    const initWeather = () => {
+        if (typeof WeatherAnimationEngine === 'undefined' || typeof WeatherService === 'undefined') return;
+
         const canvas = document.getElementById('weather-canvas');
-        if (canvas) {
-            window._weatherEngine = new WeatherAnimationEngine(canvas);
-            WeatherService.init(window._weatherEngine);
-        }
-    }
+        if (!canvas) return;
 
-    // ========================================
-    // 9. Weather Debug Panel (press W)
-    // ========================================
-    const weatherTypes = [
-        { key: 'sunny',   label: '☀️ 晴天' },
-        { key: 'cloudy',  label: '⛅ 多云' },
-        { key: 'overcast',label: '☁️ 阴天' },
-        { key: 'rain',    label: '🌧 下雨' },
-        { key: 'snow',    label: '❄️ 下雪' },
-        { key: 'fog',     label: '🌫 大雾' },
-        { key: 'thunder', label: '⛈ 雷暴' },
-        { key: 'night',   label: '🌙 夜晚' },
-    ];
+        window._weatherEngine = new WeatherAnimationEngine(canvas);
+        WeatherService.init(window._weatherEngine);
+    };
 
-    let debugPanel = null;
+    const initWeatherDebugPanel = (searchModule) => {
+        const searchInput = searchModule?.searchInput || null;
 
-    function toggleDebugPanel() {
-        if (debugPanel) {
-            debugPanel.remove();
-            debugPanel = null;
-            return;
-        }
+        const weatherTypes = [
+            { key: 'sunny', label: '☀️ 晴天' },
+            { key: 'cloudy', label: '⛅ 多云' },
+            { key: 'overcast', label: '☁️ 阴天' },
+            { key: 'rain', label: '🌧 下雨' },
+            { key: 'snow', label: '❄️ 下雪' },
+            { key: 'fog', label: '🌫 大雾' },
+            { key: 'thunder', label: '⛈ 雷暴' },
+            { key: 'night', label: '🌙 夜晚' }
+        ];
 
-        debugPanel = document.createElement('div');
-        debugPanel.style.cssText = `
-            position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 0.5rem; padding: 0.6rem 0.8rem;
-            background: rgba(15,23,42,0.4); backdrop-filter: blur(30px) saturate(160%);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: 14px;
-            z-index: 9999; animation: fadeUp 0.25s ease both;
-        `;
+        let debugPanel = null;
 
-        // Inject keyframes once
-        if (!document.getElementById('debug-anim')) {
-            const style = document.createElement('style');
-            style.id = 'debug-anim';
-            style.textContent = `@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}`;
-            document.head.appendChild(style);
-        }
+        const toggleDebugPanel = () => {
+            if (debugPanel) {
+                debugPanel.remove();
+                debugPanel = null;
+                return;
+            }
 
-        weatherTypes.forEach(({ key, label }) => {
-            const btn = document.createElement('button');
-            btn.textContent = label;
-            btn.style.cssText = `
-                padding: 0.45rem 0.7rem; border-radius: 8px; border: none; cursor: pointer;
-                font-size: 0.8rem; font-family: inherit; white-space: nowrap;
-                background: rgba(255,255,255,0.08); color: #e2e8f0;
+            debugPanel = document.createElement('div');
+            debugPanel.style.cssText = `
+                position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+                display: flex; gap: 0.5rem; padding: 0.6rem 0.8rem;
+                background: rgba(15,23,42,0.4); backdrop-filter: blur(30px) saturate(160%);
+                border: 1px solid rgba(255,255,255,0.12); border-radius: 14px;
+                z-index: 9999; animation: fadeUp 0.25s ease both;
+            `;
+
+            if (!document.getElementById('debug-anim')) {
+                const style = document.createElement('style');
+                style.id = 'debug-anim';
+                style.textContent = '@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
+                document.head.appendChild(style);
+            }
+
+            weatherTypes.forEach(({ key, label }) => {
+                const btn = document.createElement('button');
+                btn.textContent = label;
+                btn.style.cssText = `
+                    padding: 0.45rem 0.7rem; border-radius: 8px; border: none; cursor: pointer;
+                    font-size: 0.8rem; font-family: inherit; white-space: nowrap;
+                    background: rgba(255,255,255,0.08); color: #e2e8f0;
+                    transition: all 0.2s;
+                `;
+                btn.onmouseenter = () => { btn.style.background = 'rgba(255,255,255,0.18)'; };
+                btn.onmouseleave = () => { btn.style.background = 'rgba(255,255,255,0.08)'; };
+                btn.onclick = () => {
+                    if (window._weatherEngine) {
+                        window._weatherEngine.setWeatherType(key);
+                        document.body.classList.add('weather-active');
+                    }
+                };
+                debugPanel.appendChild(btn);
+            });
+
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '✕';
+            closeBtn.style.cssText = `
+                padding: 0.45rem 0.55rem; border-radius: 8px; border: none; cursor: pointer;
+                font-size: 0.8rem; background: rgba(255,255,255,0.06); color: #94a3b8;
                 transition: all 0.2s;
             `;
-            btn.onmouseenter = () => btn.style.background = 'rgba(255,255,255,0.18)';
-            btn.onmouseleave = () => btn.style.background = 'rgba(255,255,255,0.08)';
-            btn.onclick = () => {
-                if (window._weatherEngine) {
-                    window._weatherEngine.setWeatherType(key);
-                    document.body.classList.add('weather-active');
-                }
+            closeBtn.onmouseenter = () => {
+                closeBtn.style.background = 'rgba(239,68,68,0.2)';
+                closeBtn.style.color = '#f87171';
             };
-            debugPanel.appendChild(btn);
+            closeBtn.onmouseleave = () => {
+                closeBtn.style.background = 'rgba(255,255,255,0.06)';
+                closeBtn.style.color = '#94a3b8';
+            };
+            closeBtn.onclick = () => {
+                debugPanel.remove();
+                debugPanel = null;
+            };
+            debugPanel.appendChild(closeBtn);
+
+            document.body.appendChild(debugPanel);
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'w' && (!searchInput || document.activeElement !== searchInput) && !e.ctrlKey && !e.metaKey) {
+                toggleDebugPanel();
+            }
         });
+    };
 
-        // Close button
-        const closeBtn = document.createElement('button');
-        closeBtn.textContent = '✕';
-        closeBtn.style.cssText = `
-            padding: 0.45rem 0.55rem; border-radius: 8px; border: none; cursor: pointer;
-            font-size: 0.8rem; background: rgba(255,255,255,0.06); color: #94a3b8;
-            transition: all 0.2s;
-        `;
-        closeBtn.onmouseenter = () => { closeBtn.style.background = 'rgba(239,68,68,0.2)'; closeBtn.style.color = '#f87171'; };
-        closeBtn.onmouseleave = () => { closeBtn.style.background = 'rgba(255,255,255,0.06)'; closeBtn.style.color = '#94a3b8'; };
-        closeBtn.onclick = () => { debugPanel.remove(); debugPanel = null; };
-        debugPanel.appendChild(closeBtn);
-
-        document.body.appendChild(debugPanel);
-    }
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'w' && document.activeElement !== searchInput && !e.ctrlKey && !e.metaKey) {
-            toggleDebugPanel();
-        }
-    });
+    initTheme();
+    initBookmarks();
+    initCardAnimations();
+    initClockAndGreeting();
+    const searchModule = initSearch();
+    initKeyboardShortcuts(searchModule);
+    initPWA();
+    initWeather();
+    initWeatherDebugPanel(searchModule);
 });
