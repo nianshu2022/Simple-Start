@@ -275,8 +275,14 @@ html[data-theme="light"] .weather-detail {
 
 @media (max-width: 480px) {
     .weather-detail {
-        right: -4px;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%) translateY(-6px) scale(0.96);
         width: min(90vw, 280px);
+    }
+
+    .weather-detail.show {
+        transform: translateX(-50%) translateY(0) scale(1);
     }
 
     .weather-widget {

@@ -499,6 +499,51 @@ document.addEventListener('DOMContentLoaded', () => {
         WeatherService.init(window._weatherEngine);
     };
 
+    const initMobileToolbarAutoCompact = () => {
+        const toolbar = document.querySelector('.floating-toolbar');
+        if (!toolbar) return;
+
+        const mediaQuery = window.matchMedia('(max-width: 480px)');
+        let ticking = false;
+        let compact = false;
+
+        const applyCompactState = () => {
+            if (!mediaQuery.matches) {
+                toolbar.classList.remove('is-compact');
+                compact = false;
+                return;
+            }
+
+            const shouldCompact = window.scrollY > 18;
+            if (shouldCompact === compact) return;
+            compact = shouldCompact;
+            toolbar.classList.toggle('is-compact', compact);
+        };
+
+        const onScroll = () => {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(() => {
+                applyCompactState();
+                ticking = false;
+            });
+        };
+
+        const onMediaChange = () => {
+            applyCompactState();
+        };
+
+        window.addEventListener('scroll', onScroll, { passive: true });
+
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', onMediaChange);
+        } else if (typeof mediaQuery.addListener === 'function') {
+            mediaQuery.addListener(onMediaChange);
+        }
+
+        applyCompactState();
+    };
+
     const initWeatherDebugPanel = (searchModule) => {
         const searchInput = searchModule?.searchInput || null;
 
@@ -597,5 +642,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initKeyboardShortcuts(searchModule);
     initPWA();
     initWeather();
+    initMobileToolbarAutoCompact();
     initWeatherDebugPanel(searchModule);
 });
