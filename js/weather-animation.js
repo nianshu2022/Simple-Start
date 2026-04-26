@@ -78,6 +78,15 @@ class WeatherAnimationEngine {
         this.resizeTimer = null;
         this.noise = new SimplexNoise(42);
 
+        this.adaptivePerf = {
+            lowFpsCount: 0,
+            recoverCount: 0,
+            enabled: false,
+            minFps: 24,
+            triggerFrames: 5,
+            recoverFrames: 10
+        };
+
         this.performanceProfile = this.createPerformanceProfile();
         this.targetFrameInterval = 1000 / this.performanceProfile.targetFps;
 
@@ -223,7 +232,45 @@ class WeatherAnimationEngine {
         this.loop(this.lastTime);
     }
 
-    stop() { this.running = false; }
+    stop() {
+        this.running = false;
+    }
+
+    handleAdaptivePerformance() {
+        if (!this.performanceProfile || this.performanceProfile.lowPower) return;
+
+        if (this.fps > 0 && this.fps < this.adaptivePerf.minFps) {
+            this.adaptivePerf.lowFpsCount += 1;
+            this.adaptivePerf.recoverCount = 0;
+        } else if (this.fps >= this.adaptivePerf.minFps + 7) {
+            this.adaptivePerf.recoverCount += 1;
+            this.adaptivePerf.lowFpsCount = Math.max(0, this.adaptivePerf.lowFpsCount - 1);
+        }
+
+        if (!this.adaptivePerf.enabled && this.adaptivePerf.lowFpsCount >= this.adaptivePerf.triggerFrames) {
+            this.adaptivePerf.enabled = true;
+            this.performanceProfile.sceneDensity = 0.58;
+            this.performanceProfile.foregroundDensity = 0.42;
+            this.targetFrameInterval = 1000 / 30;
+            if (this.foregroundCanvas) {
+                this.foregroundCanvas.style.opacity = '0.85';
+            }
+            this.resize();
+        }
+
+        if (this.adaptivePerf.enabled && this.adaptivePerf.recoverCount >= this.adaptivePerf.recoverFrames) {
+            this.adaptivePerf.enabled = false;
+            this.performanceProfile.sceneDensity = 0.82;
+            this.performanceProfile.foregroundDensity = 0.68;
+            this.targetFrameInterval = 1000 / 45;
+            if (this.foregroundCanvas) {
+                this.foregroundCanvas.style.opacity = '';
+            }
+            this.resize();
+            this.adaptivePerf.lowFpsCount = 0;
+            this.adaptivePerf.recoverCount = 0;
+        }
+    }
 
     loop(timestamp) {
         if (!this.running) return;
@@ -241,6 +288,7 @@ class WeatherAnimationEngine {
             this.fps = this.frameCount;
             this.frameCount = 0;
             this.lastFpsTime = timestamp;
+            this.handleAdaptivePerformance();
         }
 
         if (!this.currentScene) {

@@ -108,6 +108,25 @@ document.addEventListener('DOMContentLoaded', () => {
         maxEntries: 150
     });
 
+    const createToast = () => {
+        const toastEl = document.getElementById('app-toast');
+        let timer = null;
+
+        const show = (text, duration = 1400) => {
+            if (!toastEl) return;
+            toastEl.textContent = text;
+            toastEl.classList.add('show');
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                toastEl.classList.remove('show');
+            }, duration);
+        };
+
+        return { show };
+    };
+
+    const appToast = createToast();
+
     const initTheme = () => {
         const themeToggle = document.getElementById('theme-toggle');
         const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -156,7 +175,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (themeToggle) {
             themeToggle.addEventListener('click', () => {
                 const current = document.documentElement.getAttribute('data-theme');
-                applyTheme(current === 'dark' ? 'light' : 'dark');
+                const nextTheme = current === 'dark' ? 'light' : 'dark';
+                applyTheme(nextTheme);
+                appToast.show(nextTheme === 'dark' ? '已切换为深色主题' : '已切换为浅色主题', 1200);
             });
         }
 
@@ -388,13 +409,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const syncEngineUI = () => {
             currentEngineIcon.textContent = engineNames[currentEngine];
             engineOptions.forEach((opt) => {
-                opt.classList.toggle('active', opt.dataset.engine === currentEngine);
+                const selected = opt.dataset.engine === currentEngine;
+                opt.classList.toggle('active', selected);
+                opt.setAttribute('aria-selected', String(selected));
             });
         };
 
         const closeDropdown = () => {
             engineDropdown.classList.remove('show');
             engineSelector.classList.remove('active');
+            engineSelector.setAttribute('aria-expanded', 'false');
+        };
+
+        const openDropdown = () => {
+            engineDropdown.classList.add('show');
+            engineSelector.classList.add('active');
+            engineSelector.setAttribute('aria-expanded', 'true');
         };
 
         const performSearch = () => {
@@ -404,32 +434,55 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        const cycleEngine = () => {
+        const cycleEngine = ({ showFeedback = true } = {}) => {
             const engineKeys = Object.keys(engines);
             const currentIndex = engineKeys.indexOf(currentEngine);
             const nextIndex = (currentIndex + 1) % engineKeys.length;
             currentEngine = engineKeys[nextIndex];
             syncEngineUI();
+            if (showFeedback) {
+                appToast.show(`搜索引擎：${engineNames[currentEngine]}`);
+            }
         };
 
         engineSelector.addEventListener('click', (e) => {
             e.stopPropagation();
-            engineDropdown.classList.toggle('show');
-            engineSelector.classList.toggle('active');
+            if (engineDropdown.classList.contains('show')) {
+                closeDropdown();
+            } else {
+                openDropdown();
+            }
+        });
+
+        engineSelector.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (engineDropdown.classList.contains('show')) closeDropdown();
+                else openDropdown();
+            }
         });
 
         document.addEventListener('click', closeDropdown);
 
         engineOptions.forEach((option) => {
+            option.setAttribute('tabindex', '0');
             option.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const selectedEngine = option.dataset.engine;
                 if (selectedEngine && engines[selectedEngine]) {
                     currentEngine = selectedEngine;
+                    appToast.show(`搜索引擎：${engineNames[currentEngine]}`);
                 }
                 syncEngineUI();
                 closeDropdown();
                 searchInput.focus();
+            });
+
+            option.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    option.click();
+                }
             });
         });
 
@@ -457,7 +510,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (e.key === 'Tab' && searchInput && document.activeElement === searchInput) {
                 e.preventDefault();
-                searchModule?.cycleEngine?.();
+                searchModule?.cycleEngine?.({ showFeedback: true });
             }
 
             if (e.key === 'Escape' && searchInput && document.activeElement === searchInput) {
@@ -544,8 +597,45 @@ document.addEventListener('DOMContentLoaded', () => {
         applyHiddenState();
     };
 
+    const initWeatherWidgetA11y = () => {
+        const widget = document.getElementById('weather-widget');
+        const detail = document.getElementById('weather-detail');
+        if (!widget || !detail) return;
+
+        const syncExpanded = () => {
+            widget.setAttribute('aria-expanded', String(detail.classList.contains('show')));
+        };
+
+        widget.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                detail.classList.toggle('show');
+                syncExpanded();
+            }
+            if (e.key === 'Escape') {
+                detail.classList.remove('show');
+                syncExpanded();
+            }
+        });
+
+        // 点击行为由 weather.js 负责开关，这里只做 ARIA 状态同步
+        widget.addEventListener('click', syncExpanded);
+
+        // 监听 class 变化，覆盖“点击外部关闭”等路径，确保 aria-expanded 始终准确
+        const observer = new MutationObserver(syncExpanded);
+        observer.observe(detail, { attributes: true, attributeFilter: ['class'] });
+
+        syncExpanded();
+    };
+
     const initWeatherDebugPanel = (searchModule) => {
         const searchInput = searchModule?.searchInput || null;
+        const DEBUG_WEATHER_PARAM = 'debugWeather';
+        const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+        const forceEnable = new URLSearchParams(window.location.search).get(DEBUG_WEATHER_PARAM) === '1';
+        const debugEnabled = isLocalHost || forceEnable;
+
+        if (!debugEnabled) return;
 
         const weatherTypes = [
             { key: 'sunny', label: '☀️ 晴天' },
@@ -628,7 +718,8 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'w' && (!searchInput || document.activeElement !== searchInput) && !e.ctrlKey && !e.metaKey) {
+            const isTypingInSearch = !!searchInput && document.activeElement === searchInput;
+            if (e.key === 'w' && !isTypingInSearch && !e.ctrlKey && !e.metaKey) {
                 toggleDebugPanel();
             }
         });
@@ -643,5 +734,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initPWA();
     initWeather();
     initMobileToolbarAutoHide();
+    initWeatherWidgetA11y();
     initWeatherDebugPanel(searchModule);
 });

@@ -80,8 +80,9 @@ html[data-theme="light"] .weather-widget {
     transform: scale(1.04);
 }
 
-html[data-theme="light"] .weather-widget:hover {
-    background: rgba(255, 255, 255, 0.4);
+.weather-widget:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
 }
 
 .weather-widget-main {
@@ -275,10 +276,16 @@ html[data-theme="light"] .weather-detail {
 
 @media (max-width: 480px) {
     .weather-detail {
+        position: fixed;
         left: 50%;
         right: auto;
-        transform: translateX(-50%) translateY(-6px) scale(0.96);
-        width: min(90vw, 280px);
+        top: auto;
+        bottom: 0.45rem;
+        transform: translateX(-50%) translateY(14px) scale(0.985);
+        width: min(94vw, 360px);
+        max-height: min(66vh, 520px);
+        overflow-y: auto;
+        border-radius: 16px;
     }
 
     .weather-detail.show {
@@ -313,3 +320,4 @@ html[data-theme="light"] .weather-detail {
         max-width: 44px;
     }
 }
+

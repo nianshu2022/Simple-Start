@@ -13,27 +13,29 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap"
         rel="stylesheet">
     <!-- Styles -->
-    <link rel="stylesheet" href="css/style.css?v=3">
-    <link rel="stylesheet" href="css/weather.css?v=2">
+    <link rel="stylesheet" href="css/style.css?v=4">
+    <link rel="stylesheet" href="css/weather.css?v=4">
     <link rel="icon" href="img/icon-512.png" type="image/png">
 </head>
 
 <body>
-    <canvas id="weather-canvas"></canvas>
-    <div class="background-overlay"></div>
+    <a class="skip-link" href="#search-input">跳到搜索</a>
+    <canvas id="weather-canvas" aria-hidden="true"></canvas>
+    <div class="background-overlay" aria-hidden="true"></div>
 
     <!-- Floating Toolbar — top right -->
-    <div class="floating-toolbar">
-        <div class="weather-widget" id="weather-widget">
+    <div class="floating-toolbar" role="toolbar" aria-label="快捷工具栏">
+        <div class="weather-widget" id="weather-widget" role="button" tabindex="0" aria-expanded="false"
+            aria-controls="weather-detail" aria-label="查看天气详情">
             <div class="weather-widget-main">
-                <img class="weather-icon" id="weather-icon" src="" alt="天气">
+                <img class="weather-icon" id="weather-icon" src="" alt="天气图标">
                 <div class="weather-info">
                     <span class="weather-temp" id="weather-temp">--°</span>
                     <span class="weather-country" id="weather-country"></span>
                     <span class="weather-city" id="weather-city">--</span>
                 </div>
             </div>
-            <div class="weather-detail" id="weather-detail">
+            <div class="weather-detail" id="weather-detail" role="region" aria-label="天气详情">
                 <div class="weather-detail-row">
                     <span class="weather-detail-label">天气</span>
                     <span class="weather-detail-value" id="weather-desc">--</span>
@@ -80,7 +82,7 @@
             </div>
         </div>
 
-        <button class="theme-toggle-btn" id="theme-toggle" title="切换主题">
+        <button class="theme-toggle-btn" id="theme-toggle" title="切换主题" type="button" aria-label="切换深浅主题">
             <span class="icon-sun">☀️</span>
             <span class="icon-moon">🌙</span>
         </button>
@@ -88,8 +90,8 @@
 
     <div class="container">
         <!-- Hero: Centered Time & Greeting -->
-        <section class="hero-section">
-            <div id="greeting-container" class="greeting-pill">
+        <section class="hero-section" aria-label="时间与问候">
+            <div id="greeting-container" class="greeting-pill" aria-live="polite">
                 <span id="greeting-icon">☀️</span>
                 <span id="greeting-text">Good Morning</span>
             </div>
@@ -100,34 +102,36 @@
         </section>
 
         <!-- Search Section -->
-        <section class="search-section">
+        <section class="search-section" aria-label="搜索">
             <div class="search-container">
-                <div class="search-engine-selector" id="engine-selector">
+                <div class="search-engine-selector" id="engine-selector" role="button" tabindex="0" aria-haspopup="listbox"
+                    aria-expanded="false" aria-controls="engine-dropdown">
                     <span id="current-engine-icon">百度</span>
                     <svg class="selector-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-                        stroke-linejoin="round">
+                        stroke-linejoin="round" aria-hidden="true">
                         <path d="M6 9l6 6 6-6" />
                     </svg>
                     <!-- Dropdown Menu -->
-                    <div class="engine-dropdown hidden" id="engine-dropdown">
-                        <div class="engine-option active" data-engine="baidu">百度</div>
-                        <div class="engine-option" data-engine="bing">Bing</div>
-                        <div class="engine-option" data-engine="google">Google</div>
+                    <div class="engine-dropdown hidden" id="engine-dropdown" role="listbox" aria-label="搜索引擎列表">
+                        <div class="engine-option active" data-engine="baidu" role="option" aria-selected="true">百度</div>
+                        <div class="engine-option" data-engine="bing" role="option" aria-selected="false">Bing</div>
+                        <div class="engine-option" data-engine="google" role="option" aria-selected="false">Google</div>
                     </div>
                 </div>
 
-                <div class="divider-vertical"></div>
+                <div class="divider-vertical" aria-hidden="true"></div>
 
-                <input type="text" id="search-input" placeholder="搜索一下..." autocomplete="off">
+                <input type="text" id="search-input" placeholder="搜索一下..." autocomplete="off" aria-label="输入搜索关键词">
 
-                <div class="search-hint">
+                <div class="search-hint" aria-hidden="true">
                     <kbd>/</kbd>
                 </div>
 
-                <button id="search-btn">
+                <button id="search-btn" type="button" aria-label="执行搜索">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true">
                         <circle cx="11" cy="11" r="8"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
@@ -136,17 +140,19 @@
         </section>
 
         <!-- Bookmarks -->
-        <main id="bookmarks-container">
+        <main id="bookmarks-container" aria-label="常用网站导航">
             <!-- Content will be injected by main.js -->
         </main>
     </div>
 
+    <div class="toast" id="app-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
     <!-- Scripts -->
-    <script src="js/data.js?v=2"></script>
-    <script src="js/weather-animation.js?v=2"></script>
-    <script src="js/weather.js?v=1"></script>
-    <script src="js/main.js?v=3"></script>
-    <canvas id="weather-foreground"></canvas>
+    <script src="js/data.js?v=4"></script>
+    <script src="js/weather-animation.js?v=4"></script>
+    <script src="js/weather.js?v=4"></script>
+    <script src="js/main.js?v=4"></script>
+    <canvas id="weather-foreground" aria-hidden="true"></canvas>
 </body>
 
 </html>
