@@ -164,7 +164,7 @@ self.addEventListener('fetch', (event) => {
                     if (!fallback) {
                         swLog('error', 'API 回退失败：缓存未命中', { path: url.pathname });
                     }
-                    return fallback;
+                    return fallback || Response.error();
                 })
         );
         return;
@@ -180,7 +180,7 @@ self.addEventListener('fetch', (event) => {
                 if (!fallback) {
                     swLog('error', '同源请求回退失败：缓存未命中', { path: url.pathname });
                 }
-                return fallback;
+                return fallback || Response.error();
             })
     );
 });

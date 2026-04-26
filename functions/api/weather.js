@@ -1,5 +1,7 @@
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 60;
+const REQUIRED_UPSTREAM_TIMEOUT_MS = 6000;
+const OPTIONAL_UPSTREAM_TIMEOUT_MS = 4500;
 
 function jsonError(httpStatus, code, message, details) {
     return Response.json(
@@ -67,6 +69,17 @@ function parseCoordinate(value, { min, max }) {
     return num;
 }
 
+async function fetchWithTimeout(requestUrl, { timeoutMs = REQUIRED_UPSTREAM_TIMEOUT_MS } = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        return await fetch(requestUrl, { signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 export async function onRequestGet(context) {
     const { request, env } = context;
 
@@ -115,10 +128,19 @@ export async function onRequestGet(context) {
             `https://devapi.qweather.com/v7/air/now?location=${encodeURIComponent(location)}&key=${encodeURIComponent(API_KEY)}`
         ];
 
-        const [weatherNowRes, cityRes] = await Promise.all([
-            fetch(weatherNowUrl),
-            fetch(cityUrl)
-        ]);
+        let weatherNowRes;
+        let cityRes;
+
+        try {
+            [weatherNowRes, cityRes] = await Promise.all([
+                fetchWithTimeout(weatherNowUrl),
+                fetchWithTimeout(cityUrl)
+            ]);
+        } catch (error) {
+            return jsonError(502, 50201, 'Upstream weather service unavailable', {
+                reason: String(error?.message || error)
+            });
+        }
 
         if (!weatherNowRes.ok || !cityRes.ok) {
             return jsonError(502, 50201, 'Upstream weather service unavailable');
@@ -135,7 +157,7 @@ export async function onRequestGet(context) {
 
         const fetchOptionalJson = async (requestUrl) => {
             try {
-                const res = await fetch(requestUrl);
+                const res = await fetchWithTimeout(requestUrl, { timeoutMs: OPTIONAL_UPSTREAM_TIMEOUT_MS });
                 if (!res || !res.ok) return null;
                 const data = await res.json();
                 if (typeof data?.code === 'undefined') return data;

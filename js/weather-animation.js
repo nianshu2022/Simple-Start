@@ -124,7 +124,6 @@ class WeatherAnimationEngine {
 
         this.resize();
         this.bindEvents();
-        if (this.reducedMotion) this.renderStaticFallback();
     }
 
     createPerformanceProfile() {
@@ -176,14 +175,27 @@ class WeatherAnimationEngine {
     }
 
     bindEvents() {
-        window.addEventListener('resize', () => {
+        this.boundResizeHandler = () => {
             clearTimeout(this.resizeTimer);
-            this.resizeTimer = setTimeout(() => this.resize(), 150);
-        });
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) this.stop();
-            else if (this.currentScene) this.start();
-        });
+            this.resizeTimer = setTimeout(() => {
+                this.resize();
+                if (this.reducedMotion) this.renderStaticFallback();
+            }, 150);
+        };
+
+        this.boundVisibilityHandler = () => {
+            if (document.hidden) {
+                this.stop();
+                return;
+            }
+
+            if (!this.currentScene) return;
+            if (this.reducedMotion) this.renderStaticFallback();
+            else this.start();
+        };
+
+        window.addEventListener('resize', this.boundResizeHandler);
+        document.addEventListener('visibilitychange', this.boundVisibilityHandler);
     }
 
     setWeatherType(type) {
@@ -198,11 +210,31 @@ class WeatherAnimationEngine {
             if (type === 'thunder' && this.scenes.thunder) {
                 this.scenes.thunder.foreground = this.foregrounds.thunder || null;
             }
-            this.start();
             document.body.classList.add('weather-active');
+            if (this.reducedMotion) {
+                this.renderStaticFallback();
+                return;
+            }
+            this.start();
             return;
         }
-        if (this.currentScene === scene) return;
+        if (this.currentScene === scene) {
+            if (this.reducedMotion) this.renderStaticFallback();
+            return;
+        }
+
+        if (this.reducedMotion) {
+            this.currentScene = scene;
+            this.currentScene.init();
+            this.currentForeground = null;
+            this.nextScene = null;
+            this.nextForeground = null;
+            this.transitioning = false;
+            this.transitionProgress = 0;
+            document.body.classList.add('weather-active');
+            this.renderStaticFallback();
+            return;
+        }
 
         this.nextScene = scene;
         this.nextScene.init();
@@ -224,6 +256,11 @@ class WeatherAnimationEngine {
     }
 
     start() {
+        if (this.reducedMotion) {
+            this.running = false;
+            this.renderStaticFallback();
+            return;
+        }
         if (this.running) return;
         this.running = true;
         this.lastTime = performance.now();
@@ -352,7 +389,13 @@ class WeatherAnimationEngine {
 
     destroy() {
         this.stop();
-        window.removeEventListener('resize', this.resize);
+        clearTimeout(this.resizeTimer);
+        if (this.boundResizeHandler) {
+            window.removeEventListener('resize', this.boundResizeHandler);
+        }
+        if (this.boundVisibilityHandler) {
+            document.removeEventListener('visibilitychange', this.boundVisibilityHandler);
+        }
     }
 }
 
